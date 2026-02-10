@@ -297,23 +297,28 @@ h1 {
     font-weight: 600;
     margin-top: 15px;
 }
-/* Định dạng riêng cho nút tên QR */
-.qr-btn {
-    background-color: transparent; /* Nền trong suốt */
-    color: #ffffff;                /* Chữ QR màu trắng */
-    border: 1px solid #ffffff;    /* Viền trắng mỏng giống ảnh 2 */
-    padding: 5px 15px;            /* Khoảng cách chữ và viền */
-    border-radius: 6px;           /* Bo góc nhẹ cho đẹp */
-    cursor: pointer;              /* Hiệu ứng bàn tay */
-    font-size: 13px;
-    font-weight: bold;
-    transition: 0.3s;             /* Hiệu ứng mượt khi di chuột */
-    margin-left: 5px;             /* Khoảng cách với nút Sao chép */
+.qr-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+    margin-bottom: 8px;
 }
 
-/* Hiệu ứng khi di chuột vào nút QR */
-.qr-btn:hover {
-    background-color: rgba(255, 255, 255, 0.15); /* Nền sáng lên một chút */
-    border-color: #3498db;                      /* Đổi viền sang màu xanh dương cho nổi bật */
+.qr-btn {
+    background: transparent;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    padding: 3px 12px;
+    border-radius: 15px; /* Bo tròn đều cho cả 3 nút */
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
 }
+
+.qr-btn:hover {
+    background: white;
+    color: #1a1a1a;
+}
+
 
