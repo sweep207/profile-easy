@@ -297,38 +297,38 @@ h1 {
     font-weight: 600;
     margin-top: 15px;
 }
-/* Căn giữa toàn bộ khối chứa nút */
+/* Căn giữa nút trong khung ngân hàng */
 .qr-wrapper {
     display: flex;
-    justify-content: center; /* Căn giữa theo chiều ngang */
-    align-items: center;     /* Căn giữa theo chiều dọc */
-    width: 100%;             /* Đảm bảo chiếm hết chiều rộng khung */
-    margin-top: 15px;        /* Khoảng cách với dòng tên chủ tài khoản */
-    margin-bottom: 5px;
+    justify-content: center; /* Căn giữa ngang */
+    width: 100%;
+    margin-top: 15px;
+    margin-bottom: 10px;
 }
 
 /* Định dạng nút QR giống nút Sao chép */
-.qr-btn {
-    background-color: #3b82f6; /* Màu xanh dương chuẩn nút Sao chép */
-    color: white;              /* Màu chữ trắng */
-    border: none;              /* Bỏ viền cũ */
-    padding: 6px 20px;         /* Khoảng cách đệm cho nút vừa vặn */
-    border-radius: 8px;        /* Bo góc giống nút Sao chép */
+.qr-btn-blue {
+    background-color: #3b82f6; /* Màu xanh dương giống nút sao chép */
+    color: white;              /* Chữ trắng */
+    border: none;              /* Không viền */
+    padding: 8px 24px;         /* Độ rộng nút cân đối */
+    border-radius: 8px;        /* Bo góc giống nút sao chép */
     font-size: 14px;
-    font-weight: 600;
+    font-weight: bold;
     cursor: pointer;
-    transition: background 0.3s ease;
+    transition: background 0.3s;
 }
 
-/* Hiệu ứng khi di chuột vào (Hover) */
-.qr-btn:hover {
-    background-color: #2563eb; /* Xanh đậm hơn một chút khi di chuột */
+/* Hiệu ứng khi di chuột vào */
+.qr-btn-blue:hover {
+    background-color: #2563eb; /* Xanh đậm hơn một chút */
 }
 
-/* Bỏ gạch chân nếu có của thẻ a */
+/* Xóa gạch chân mặc định của thẻ link */
 .qr-wrapper a {
     text-decoration: none;
 }
+
 
 
 
