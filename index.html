@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" id="viewportMeta" content="width=device-width, initial-scale=1.0">
+    <title>PROFILE CARD</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- CSS riêng -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div class="profile-card">
+        <div class="header">
+            <img src="https://i.postimg.cc/NFdHsMqG/9962E01A-0C09-4829-B79D-AC207BD43B64.png" alt="Avatar" class="avatar">
+        </div>
+
+        <div class="info">
+            <h1>SWEEP🚀</h1>
+            <div class="job"><span class="typing">Đặng Toàn Vũ </span></div>
+            <p class="bio">Đam mê xây dựng các ứng dụng web tối ưu và trải nghiệm người dùng tuyệt vời.</p>
+        </div>
+
+        <div class="stats">
+            <div class="stat-item"><b>120+</b><span>Dự án</span></div>
+            <div class="stat-item"><b>15k</b><span>Người theo dõi</span></div>
+            <div class="stat-item"><b>500+</b><span>Đánh giá</span></div>
+        </div>
+
+        <div class="tab-buttons">
+            <button class="tab-btn active" data-tab="social">Mạng xã hội</button>
+            <button class="tab-btn" data-tab="bank">Ngân hàng</button>
+        </div>
+
+        <div class="contact-section">
+            <div id="social" class="contact-content active">
+                <div class="social">
+                    <a href="https://www.facebook.com/im.dvu2407" target="_blank">
+                        <i class="fab fa-facebook-f"></i> Facebook
+                    </a>
+                    <a href="https://github.com/sweep207" target="_blank">
+                        <i class="fab fa-github"></i> GitHub
+                    </a>
+                    <a href="https://youtube.com/@sweep207?si=jnelEe6ZcT2bIbaP" target="_blank">
+                        <i class="fab fa-youtube"></i> YouTube
+                    </a>
+                    <a href="https://t.me/Shadowrocket2411" target="_blank">
+                        <i class="fab fa-telegram"></i> Telegram
+                    </a>
+                    <a href="https://www.tiktok.com/@sweep207?_r=1&_t=ZS-93o0IWVe0zI" target="_blank">
+                        <i class="fab fa-tiktok"></i> TikTok
+                    </a>
+                    <a href="https://beacons.ai/sweep207" target="_blank">
+                        <i class="fas fa-globe"></i> Website
+                    </a>
+                    <a href="https://zalo.me/0853261605" target="_blank">
+                        <i class="fas fa-comment"></i> Zalo
+                    </a>
+                    <a href="mailto:dangtoanvu07@gmail.com">
+                        <i class="fas fa-envelope"></i> Email
+                    </a>
+   
+                </div>
+            </div>
+
+            <div id="bank" class="contact-content">
+                <div class="bank-list">
+                    <div class="bank-item">
+                        <div class="bank-header">
+                            <img src="https://i.postimg.cc/J0FzYBCq/IMG-8247.jpg" alt="Vietcombank Logo" class="bank-logo">
+                            <div class="bank-name">Vietcombank</div>
+                        </div>
+                        <div class="bank-info">
+                            <span>1060658490</span>
+                            <button class="copy-btn" onclick="copyToClipboard('1060658490')">Sao chép</button>
+                        </div>
+                        <div class="owner-name">Chủ TK: DANG TOAN VU</div>
+                    </div>
+                        <div class="bank-item">
+                        <div class="bank-header">
+                            <img src="https://i.postimg.cc/zGPJBz5C/MB_Bank.png" alt="MB Bank Logo" class="bank-logo">
+                            <div class="bank-name">MB Bank</div>
+                        </div>
+                        <div class="bank-info">
+                            <span>0853261605</span>
+                            <button class="copy-btn" onclick="copyToClipboard('0853261605')">Sao chép</button>
+                        </div>
+                        <div class="owner-name">Chủ TK: DANG TOAN VU</div>
+                    </div>
+                    <div class="bank-item">
+                        <div class="bank-header">
+                            <img src="https://i.postimg.cc/85MhdN8V/IMG-8250.png" alt="MoMo Logo" class="bank-logo">
+                            <div class="bank-name">MoMo</div>
+                        </div>
+                        <div class="bank-info">
+                            <span>0853261605</span>
+                            <button class="copy-btn" onclick="copyToClipboard('0853261605')">Sao chép</button>
+                        </div>
+                        <div class="owner-name">Chủ TK: DANG TOAN VU</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="cookie-box">
+        <i class="fas fa-cookie-bite" style="font-size: 28px; color: #fbbf24; margin-bottom: 10px;"></i>
+        <h3>Chính sách Cookies</h3>
+        <p style="font-size: 14px; color: var(--text-secondary);">Chúng tôi sử dụng cookies để cá nhân hóa.</p>
+        <button class="cookie-btn" onclick="acceptCookies()">Chấp nhận tất cả</button>
+    </div>
+
+    <!-- JavaScript riêng -->
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
