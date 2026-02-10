@@ -297,28 +297,38 @@ h1 {
     font-weight: 600;
     margin-top: 15px;
 }
+/* Căn giữa toàn bộ khối chứa nút */
 .qr-wrapper {
     display: flex;
-    justify-content: center;
-    margin-top: 10px;
-    margin-bottom: 8px;
+    justify-content: center; /* Căn giữa theo chiều ngang */
+    align-items: center;     /* Căn giữa theo chiều dọc */
+    width: 100%;             /* Đảm bảo chiếm hết chiều rộng khung */
+    margin-top: 15px;        /* Khoảng cách với dòng tên chủ tài khoản */
+    margin-bottom: 5px;
 }
 
+/* Định dạng nút QR giống nút Sao chép */
 .qr-btn {
-    background: transparent;
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    padding: 3px 12px;
-    border-radius: 15px; /* Bo tròn đều cho cả 3 nút */
-    font-size: 11px;
-    font-weight: bold;
+    background-color: #3b82f6; /* Màu xanh dương chuẩn nút Sao chép */
+    color: white;              /* Màu chữ trắng */
+    border: none;              /* Bỏ viền cũ */
+    padding: 6px 20px;         /* Khoảng cách đệm cho nút vừa vặn */
+    border-radius: 8px;        /* Bo góc giống nút Sao chép */
+    font-size: 14px;
+    font-weight: 600;
     cursor: pointer;
-    transition: 0.3s;
+    transition: background 0.3s ease;
 }
 
+/* Hiệu ứng khi di chuột vào (Hover) */
 .qr-btn:hover {
-    background: white;
-    color: #1a1a1a;
+    background-color: #2563eb; /* Xanh đậm hơn một chút khi di chuột */
 }
+
+/* Bỏ gạch chân nếu có của thẻ a */
+.qr-wrapper a {
+    text-decoration: none;
+}
+
 
 
