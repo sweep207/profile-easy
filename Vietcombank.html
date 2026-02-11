@@ -1,147 +1,43 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vietcombank-QR</title>
+    <title>Donate Vietcombank</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
-        * {
-            box-sizing: border-box;
-        }
-
-        body,
-        html {
-            font-family:Cambria, Cochin, Georgia, Times, 'Times New Roman', serif;
-            background-color: #c3dff7;
-            margin: 0;
-            padding: 5px;
-            height: 100%;
-            overflow-x: hidden;
-            box-sizing: border-box;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 700px;
-            margin: 50px auto;
-            padding: 30px;
-            background-color: #fff;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            overflow: hidden;
-        }
-
-        h1 {
-            color: #0d2035;
-            font-size: 2.5rem;
-            margin-bottom: 20px;
-            word-wrap: break-word;
-        }
-
-        
-
-        p {
-            color: #555;
-            font-size: 1.1rem;
-            margin-bottom: 30px;
-            word-wrap: break-word;
-        }
-
-        .bank-info {
-            background-color: #e9f7ff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            margin-bottom: 30px;
-            word-wrap: break-word;
-        }
-
-        .bank-info h2 {
-            color: #0a1f35;
-            font-size: 1.5rem;
-        }
-
-        .bank-info p {
-            font-size: 1.1rem;
-            margin: 5px 0;
-            color: #333;
-            word-wrap: break-word;
-        }
-
-        .qr-code img {
-            width: 100%;
-            max-width: 250px;
-            height: auto;
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-            margin: 20px 0;
-            transition: transform 0.3s ease;
-        }
-
-        .qr-code img:hover {
-            transform: scale(1.1);
-        }
-
-        ol {
-            font-size: 1.1rem;
-            text-align: left;
-            margin: 20px auto;
-            display: inline-block;
-            color: #555;
-        }
-
-        ol li {
-            margin-bottom: 10px;
-            line-height: 1.6;
-        }
-
-        @media screen and (max-width: 768px) {
-            h1 {
-                font-size: 2rem;
-            }
-
-            .container {
-                padding: 20px;
-            }
-
-            .bank-info {
-                padding: 15px;
-            }
-
-            .qr-code img {
-                max-width: 200px;
-            }
-
-            p,
-            .bank-info p {
-                font-size: 1rem;
-            }
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .serif-font { font-family: 'Playfair Display', serif; }
     </style>
 </head>
+<body class="flex justify-center items-center min-h-screen p-4">
+    <div class="bg-white max-w-md w-full border-x border-t border-green-100 shadow-sm min-h-screen flex flex-col items-center text-center p-8">
+        <h1 class="serif-font text-4xl text-[#006a31] mb-6">Donate</h1>
+        <p class="text-gray-600 text-sm mb-10">Cảm ơn bạn đã ủng hộ dự án qua Vietcombank.</p>
 
-<body>
-    <div class="container">
-        <h1>Vietcombank</h1>
-
-        <div class="bank-info">
-            <h2>Thông Tin Tài Khoản Ngân Hàng</h2>
-            <p><strong>Ngân Hàng:</strong>Vietcombank</p>
-            <p><strong>Chủ Tài Khoản:</strong> Đặng Toàn Vũ</p>
-            <p><strong>Số Tài Khoản:</strong>1060658490</p>
+        <div class="bg-[#f0fff4] rounded-xl p-8 w-full mb-8 shadow-inner">
+            <h2 class="serif-font text-2xl text-[#006a31] mb-6">Thông Tin Chuyển Khoản</h2>
+            <div class="space-y-1 text-gray-700">
+                <p><strong>Ngân Hàng:</strong> Vietcombank</p>
+                <p><strong>Chủ TK:</strong> DANG TOAN VU</p>
+                <p><strong>Số TK:</strong> <span class="text-green-700 font-bold">1060658490</span></p>
+            </div>
         </div>
 
-        <div class="qr-code">
-            <img src="./vietcombank.jpg" alt="QR Code Donate">
+        <div class="bg-white border border-gray-100 rounded-2xl p-4 shadow-lg w-64 mb-12">
+            <div class="flex items-center justify-between mb-2 px-1">
+                <img src="https://i.postimg.cc/J0FzYBCq/IMG-8247.jpg" alt="VCB Logo" class="h-6">
+                <div class="text-right">
+                    <p class="text-[10px] font-bold text-green-900 uppercase leading-none">DANG TOAN VU</p>
+                    <p class="text-[10px] text-gray-600">1060658490</p>
+                </div>
+            </div>
+            <div class="bg-white p-2">
+                <img src="https://api.vietqr.io/image/vcb-1060658490-compact.jpg" alt="QR Vietcombank" class="w-full h-auto">
+            </div>
         </div>
-
-        <div class="thank-you">    
-        </div>
+        <a href="./index.html" class="text-gray-400 text-sm underline">Quay lại trang chủ</a>
     </div>
-
-
 </body>
-
 </html>
