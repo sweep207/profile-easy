@@ -63,52 +63,40 @@ adjustZoom();
 let isTrackingStarted = false;
 
 // --- 2. HÀM LẤY IP ĐA LUỒNG (Đã fix để lấy đúng Nhà mạng) ---
-async function fetchIpInfo() {
+async function fetchIpData() {
+    // Danh sách API hỗ trợ HTTPS và CORS tốt cho môi trường Production
     const apis = [
         {
-            // Nguồn 1: ipwho.is (Rất chi tiết cho VN)
-            url: 'https://ipwho.is/',
-            parse: (d) => ({ 
-                ip: d.ip, 
-                city: d.city, 
-                isp: d.connection?.isp || d.isp || d.org 
-            })
-        },
-        {
-            // Nguồn 2: ip-api.com (Cực kỳ chính xác nhà mạng Viettel/VNPT)
-            url: 'http://ip-api.com/json/?fields=status,message,country,city,isp,org,as,query',
-            parse: (d) => ({ 
-                ip: d.query, 
-                city: d.city, 
-                isp: d.isp || d.org || d.as 
-            })
-        },
-        {
-            // Nguồn 3: ipapi.co
+            // Nguồn ổn định nhất, hỗ trợ tốt HTTPS
             url: 'https://ipapi.co/json/',
             parse: (d) => ({ 
                 ip: d.ip, 
                 city: d.city, 
-                isp: d.org || d.asn || d.version 
+                isp: d.org || d.asn_organization || "N/A" 
+            })
+        },
+        {
+            // Nguồn dự phòng cực mạnh về ISP tại Việt Nam
+            url: 'https://ip-api.com/json/?fields=status,city,isp,query', 
+            // Lưu ý: ip-api miễn phí chỉ hỗ trợ HTTP, nếu web bạn là HTTPS sẽ dễ bị chặn.
+            // Nên dùng nguồn này cuối cùng hoặc dùng proxy.
+            parse: (d) => ({ 
+                ip: d.query, 
+                city: d.city, 
+                isp: d.isp || "N/A" 
             })
         }
     ];
 
     for (const api of apis) {
         try {
-            console.log(`Thử nguồn: ${api.url}`);
-            const res = await fetch(api.url);
-            if (!res.ok) throw new Error("API Limit");
-            const data = await res.json();
-            
-            const result = api.parse(data);
-            // Kiểm tra nếu có dữ liệu IP và ISP thì mới trả về
-            if (result.ip && result.isp && result.isp !== "N/A") {
-                return result;
-            }
+            const response = await fetch(api.url);
+            if (!response.ok) continue;
+            const data = await response.json();
+            return api.parse(data);
         } catch (e) {
-            console.warn(`Nguồn ${api.url} lỗi, chuyển nguồn tiếp theo...`);
-            continue;
+            console.error("Lỗi lấy IP từ nguồn:", api.url);
+            continue; 
         }
     }
     return { ip: "Không rõ", city: "Không rõ", isp: "Không rõ" };
