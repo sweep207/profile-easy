@@ -181,7 +181,6 @@ async function fetchIpData() {
     } finally {
         isBotActive = false;
     }
-}
 
 // --- 6. KHỞI CHẠY ---
 async function start() {
