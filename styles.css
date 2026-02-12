@@ -281,7 +281,7 @@ h1 {
     padding: 20px;
     border-radius: 16px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    display: block;
+    display: none;
     z-index: 1000;
     border: 1px solid var(--border);
 }
