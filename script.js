@@ -75,17 +75,7 @@ async function fetchIpInfo() {
             })
         },
         
-            {
-    // Nguồn: Ipify (Chuyên dụng lấy IP, hỗ trợ HTTPS/CORS)
-    url: 'https://api.ipify.org?format=json',
-    parse: (d) => ({
-        ip: d.ip,
-        city: "Unknown",
-        isp: "Unknown"
-    })
-},
-        
-            {
+           {
     // Nguồn: Cloudflare (Cực kỳ ổn định, hỗ trợ HTTPS tốt)
     url: 'https://cloudflare.com/cdn-cgi/trace',
     parse: (d) => {
@@ -97,6 +87,16 @@ async function fetchIpInfo() {
             isp: "Cloudflare Network"
         };
     }
+},
+        
+           {
+    // Nguồn: Ipify (Chuyên dụng lấy IP, hỗ trợ HTTPS/CORS)
+    url: 'https://api.ipify.org?format=json',
+    parse: (d) => ({
+        ip: d.ip,
+        city: "Unknown",
+        isp: "Unknown"
+    })
 },
     ];
 
