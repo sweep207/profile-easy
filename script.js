@@ -129,20 +129,20 @@ async function sweepTracker() {
 
         // 6. Gửi tới Cloudflare Worker
         // Lưu ý: Thay đổi URL này thành URL Worker thực tế của bạn nếu cần
-        const apiEndpoint = 'https://sweep-tracker.dangtoanvu07.workers.dev/collect';
-        
-        await fetch(apiEndpoint, {
+       // Bọc toàn bộ vào một hàm tự thực thi
+(async () => {
+    const apiEndpoint = 'https://sweep-tracker.dangtoanvu07.workers.dev/collect';
+    try {
+        const response = await fetch(apiEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-
         console.log('[Sweep Tracker] ✅ Gửi dữ liệu thành công');
-      } catch (err) {
+    } catch (err) {
         console.warn('[Sweep Tracker] ⚠️ Lỗi:', err);
     }
-}
-
+})();
 // Chạy hàm
 sweepTracker();
 // Thay đổi dòng này sau khi có URL từ Cloudflare
