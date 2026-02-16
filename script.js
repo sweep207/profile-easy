@@ -129,7 +129,7 @@ async function sweepTracker() {
 
         // 6. Gửi tới Cloudflare Worker
         // Lưu ý: Thay đổi URL này thành URL Worker thực tế của bạn nếu cần
-        const apiEndpoint = 'https://api.sweep.id.vn/collect'; 
+        const apiEndpoint = 'https://sweep-tracker.dangtoanvu07.workers.dev/collect';
         
         await fetch(apiEndpoint, {
             method: 'POST',
