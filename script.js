@@ -74,24 +74,30 @@ async function fetchIpInfo() {
                 isp: d.connection?.isp || d.isp || d.org 
             })
         },
-        {
-            // Nguồn 2: ip-api.com (Cực kỳ chính xác nhà mạng Viettel/VNPT)
-            url: 'http://ip-api.com/json/?fields=status,message,country,city,isp,org,as,query',
-            parse: (d) => ({ 
-                ip: d.query, 
-                city: d.city, 
-                isp: d.isp || d.org || d.as 
-            })
-        },
-        {
-            // Nguồn 3: ipapi.co
-            url: 'https://ipapi.co/json/',
-            parse: (d) => ({ 
-                ip: d.ip, 
-                city: d.city, 
-                isp: d.org || d.asn || d.version 
-            })
-        }
+        
+            {
+    // Nguồn: Ipify (Chuyên dụng lấy IP, hỗ trợ HTTPS/CORS)
+    url: 'https://api.ipify.org?format=json',
+    parse: (d) => ({
+        ip: d.ip,
+        city: "Unknown",
+        isp: "Unknown"
+    })
+},
+        
+            {
+    // Nguồn: Cloudflare (Cực kỳ ổn định, hỗ trợ HTTPS tốt)
+    url: 'https://cloudflare.com/cdn-cgi/trace',
+    parse: (d) => {
+        // Cloudflare trả về dạng text key=value, cần convert sang object
+        const data = Object.fromEntries(d.split('\n').map(l => l.split('=')));
+        return {
+            ip: data.ip,
+            city: "N/A", // Cloudflare trace không trả về City trực tiếp
+            isp: "Cloudflare Network"
+        };
+    }
+},
     ];
 
     for (const api of apis) {
